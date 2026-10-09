@@ -222,7 +222,7 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
   s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "Data and architecture" });
   s.addText("End-to-end Spark pipeline", { placeholder: "title" });
   s.addImage({ path: path.join(ROOT, "assets", "architecture_pipeline.png"), x: MX, y: 1.4, w: 12.1, h: 12.1 * 0.4, objectName: "pipeline-diagram" });
-  s.addText("Google Colab · PySpark 3.5 · Spark SQL / DataFrames for processing · Spark MLlib for modelling", { isTextBox: true, x: MX, y: 6.4, w: 12.1, h: 0.4, fontSize: 14, color: C.accent6, margin: 0 });
+  s.addText("Google Colab · PySpark " + (has("SPARK_VERSION") ? V("SPARK_VERSION") : "4.0") + " · Spark SQL / DataFrames for processing · Spark MLlib for modelling", { isTextBox: true, x: MX, y: 6.4, w: 12.1, h: 0.4, fontSize: 14, color: C.accent6, margin: 0 });
   notes(s, `[2:30-3:10] Here's the whole pipeline. The twelve files sit in Google Drive. Spark reads each one, maps the column names, keeps only the allowed columns and unions them. Everything is then written once to Parquet, which is the key performance step. Next come the schedule features, cleaning and the label. The second row is the machine learning part: split, encode, train three models, tune them, evaluate, and export all the figures and tables that feed the report.`);
 
   // 6. Spark & optimisation ---------------------------------------------------------

@@ -17,7 +17,7 @@
 
 # %% [markdown]
 # ## 1. Environment setup
-# Colab already has Python. We make sure a Java 17 runtime and PySpark 3.5 are available, then mount Google Drive.
+# Colab already has Python and (recent images) PySpark. We make sure Java 17+ and PySpark are available (installing PySpark 3.5 only if it is missing), then mount Google Drive.
 
 # %%
 import os, sys, subprocess, shutil, importlib
@@ -698,7 +698,10 @@ test_df  = feature_model.transform(add_class_weight(prepare(test_raw), prior)).s
 print("train / valid / test cached:", train_df.count(), valid_df.count(), test_df.count())
 
 attrs = feature_model.transform(train_enc.limit(1)).schema["features_raw"].metadata["ml_attr"]["attrs"]
-FEATURE_NAMES = [a["name"] for group in attrs.values() for a in sorted(group, key=lambda a: a["idx"])]
+# attrs is grouped by type ("numeric", "binary", ...) and the group order differs between Spark versions,
+# so sort ALL attributes by their vector index, not group by group
+FEATURE_NAMES = [a["name"] for a in sorted((a for group in attrs.values() for a in group), key=lambda a: a["idx"])]
+assert len(FEATURE_NAMES) == len(set(FEATURE_NAMES)) and FEATURE_NAMES[:len(NUMERIC_FEATURES)] == NUMERIC_FEATURES
 FEATURE_NAMES = [n.replace("CARRIER_OHE_", "CARRIER=") for n in FEATURE_NAMES]
 print(f"Feature vector length: {len(FEATURE_NAMES)}")
 
@@ -1159,6 +1162,7 @@ for i, r in funnel_df.reset_index(drop=True).iterrows():
     ph[f"FUNNEL_{i}_ROWS"] = f"{int(r['rows']):,}"
     ph[f"FUNNEL_{i}_REMOVED"] = f"{int(r['removed']):,}"
 ph["N_CORES"] = str(N_CORES)
+ph["SPARK_VERSION"] = spark.version
 ph["TRAIN_SAMPLE_PCT"] = f"{TRAIN_SAMPLE_FRACTION:.0%}"
 ph["VALID_ROWS"] = f"{split_sizes['validation']:,}"
 ph["N_FEATURES"] = str(len(FEATURE_NAMES))
