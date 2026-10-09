@@ -951,7 +951,7 @@ headline[cols].to_csv(f"{TABLE_DIR}/model_results_headline.csv")
 print(headline[cols].round(4).to_string())
 
 def final_model(name):
-    return FITTED.get(name + " (tuned)", FITTED[name])
+    return FITTED[name + " (tuned)"] if name + " (tuned)" in FITTED else FITTED[name]
 
 # %%
 metric_names = ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]
