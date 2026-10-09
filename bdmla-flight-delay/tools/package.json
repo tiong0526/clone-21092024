@@ -1,0 +1,17 @@
+{
+  "name": "bdmla-flight-delay-tools",
+  "private": true,
+  "description": "Builders for the CW2 report (.docx) and CW1 presentation (.pptx)",
+  "scripts": {
+    "report": "node build_report.js",
+    "deck": "node build_deck.js"
+  },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "pptxgenjs": "^3.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-icons": "^5.4.0",
+    "sharp": "^0.33.5"
+  }
+}
