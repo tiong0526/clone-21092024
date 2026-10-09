@@ -209,12 +209,12 @@ add(H1("5. Methodology and Implementation"),
   P("**Accuracy alone is misleading here:** a model that never predicts a delay reaches {{BASELINE_ACCURACY}} accuracy while catching none, so it is reported as a baseline. The useful measures are **precision** (the cost of false alarms), **recall** (delays caught) and **F1**, their balance. **ROC-AUC** measures ranking across all thresholds, and **PR-AUC** is more informative when positives are rare (Saito & Rehmsmeier, 2015). Training time is included because scalability is part of the brief."),
   H2("5.3 Models and tuning"),
   P("All three models share one standardised feature vector, so the comparison is fair. **Logistic Regression** is the interpretable linear baseline; **Random Forest** averages decorrelated trees and captures interactions such as an evening departure with a tight turnaround; **Gradient-Boosted Trees** add trees sequentially, each correcting the last. After a default run, each was tuned with CrossValidator (3-fold, PR-AUC) on a training sample (Table 2) and refitted on the full training sample."),
-  table(["Model", "Grid searched (3-fold CV)", "Selected"], [
-    ["Logistic Regression", "regParam {0.0001, 0.001, 0.01} × elasticNet {0, 0.5}", "{{LR_TUNED_PARAMS}}"],
-    ["Random Forest", "maxDepth {8, 12} × numTrees {60, 120}", "{{RF_TUNED_PARAMS}}"],
-    ["Gradient-Boosted Trees", "maxDepth {4, 6} × stepSize {0.05, 0.1}, 60 iterations", "{{GBT_TUNED_PARAMS}}"],
-  ], [2300, 4100, 2500], { numericRight: false }),
-  caption("Table 2. Hyperparameter grids and selected values."),
+  table(["Model", "Grid searched (3-fold CV)", "Selected", "CV PR-AUC"], [
+    ["Logistic Regression", "regParam {0.0001, 0.001, 0.01} × elasticNet {0, 0.5}", "{{LR_TUNED_PARAMS}}", "{{LR_CV_PR_AUC}}"],
+    ["Random Forest", "maxDepth {8, 12} × numTrees {60, 120}", "{{RF_TUNED_PARAMS}}", "{{RF_CV_PR_AUC}}"],
+    ["Gradient-Boosted Trees", "maxDepth {4, 6} × stepSize {0.05, 0.1}, 60 iterations", "{{GBT_TUNED_PARAMS}}", "{{GBT_CV_PR_AUC}}"],
+  ], [2100, 3700, 2000, 1100], { numericRight: false }),
+  caption("Table 2. Hyperparameter grids (searched on a 5% training sample), selected values and mean cross-validated PR-AUC."),
 );
 
 // ---------- 6 Results ----------

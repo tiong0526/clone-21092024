@@ -85,6 +85,11 @@ CV_FOLDS               = 3
 RUN_TEMPORAL_HOLDOUT   = os.environ.get("BDMLA_RUN_TEMPORAL", "1") == "1"  # train Jan–Sep, test Oct–Dec
 RUN_SCALING_EXPERIMENT = os.environ.get("BDMLA_RUN_SCALING", "1") == "1"   # local[1] vs local[*]
 SAVE_MODELS            = True
+RUN_BASELINE_MODELS    = True    # fit the default-configuration models before tuning (section 13.1-13.3)
+# Resume option: paste the best parameters from an earlier run's tuning output to skip CrossValidator
+# entirely (saves roughly an hour on free Colab), e.g. {"Random Forest": {"maxDepth": 12, "numTrees": 120}, ...}
+TUNED_PARAMS_OVERRIDE  = None
+CV_SCORES_OVERRIDE     = None    # optional {model: best CV PR-AUC} from that earlier run, used in the report
 FORCE_REBUILD_PARQUET  = False
 
 missing = [f for f in FILES if not os.path.exists(f)]
@@ -782,6 +787,7 @@ def evaluate_model(name, model, train_seconds, stage):
         RESULTS.append({"model": name, "stage": stage, "threshold_rule": label, "threshold": round(t, 3),
                         **metrics_from_cm(cm), "roc_auc": roc_auc, "pr_auc": pr_auc,
                         "train_seconds": train_seconds, "score_seconds": predict_seconds, **cm})
+    pd.DataFrame(RESULTS).to_csv(f"{TABLE_DIR}/model_results_all.csv", index=False)   # checkpoint
     return test_pred
 
 def fit_timed(estimator):
@@ -819,11 +825,14 @@ ESTIMATORS = {
 
 # %%
 name = "Logistic Regression"
-model, secs = fit_timed(ESTIMATORS[name])
-FITTED[name] = model
-evaluate_model(name, model, secs, "baseline")
-print(f"{name}: trained in {secs:.1f} s, iterations = {model.summary.totalIterations}")
-pd.DataFrame(RESULTS).query("model == @name")
+if RUN_BASELINE_MODELS:
+    model, secs = fit_timed(ESTIMATORS[name])
+    FITTED[name] = model
+    evaluate_model(name, model, secs, "baseline")
+    print(f"{name}: trained in {secs:.1f} s, iterations = {model.summary.totalIterations}")
+    display(pd.DataFrame(RESULTS).query("model == @name"))
+else:
+    print("RUN_BASELINE_MODELS is False, so the default configuration is skipped (tuned model is fitted in 13.4).")
 
 # %% [markdown]
 # ### 13.2 Random Forest
@@ -831,11 +840,14 @@ pd.DataFrame(RESULTS).query("model == @name")
 
 # %%
 name = "Random Forest"
-model, secs = fit_timed(ESTIMATORS[name])
-FITTED[name] = model
-evaluate_model(name, model, secs, "baseline")
-print(f"{name}: trained in {secs:.1f} s")
-pd.DataFrame(RESULTS).query("model == @name")
+if RUN_BASELINE_MODELS:
+    model, secs = fit_timed(ESTIMATORS[name])
+    FITTED[name] = model
+    evaluate_model(name, model, secs, "baseline")
+    print(f"{name}: trained in {secs:.1f} s")
+    display(pd.DataFrame(RESULTS).query("model == @name"))
+else:
+    print("RUN_BASELINE_MODELS is False, so the default configuration is skipped (tuned model is fitted in 13.4).")
 
 # %% [markdown]
 # ### 13.3 Gradient-Boosted Trees
@@ -843,11 +855,14 @@ pd.DataFrame(RESULTS).query("model == @name")
 
 # %%
 name = "Gradient-Boosted Trees"
-model, secs = fit_timed(ESTIMATORS[name])
-FITTED[name] = model
-evaluate_model(name, model, secs, "baseline")
-print(f"{name}: trained in {secs:.1f} s")
-pd.DataFrame(RESULTS).query("model == @name")
+if RUN_BASELINE_MODELS:
+    model, secs = fit_timed(ESTIMATORS[name])
+    FITTED[name] = model
+    evaluate_model(name, model, secs, "baseline")
+    print(f"{name}: trained in {secs:.1f} s")
+    display(pd.DataFrame(RESULTS).query("model == @name"))
+else:
+    print("RUN_BASELINE_MODELS is False, so the default configuration is skipped (tuned model is fitted in 13.4).")
 
 # %% [markdown]
 # ### 13.4 Hyperparameter tuning with k-fold cross-validation
@@ -858,8 +873,24 @@ pd.DataFrame(RESULTS).query("model == @name")
 # %%
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 
-TUNED_PARAMS = {}
-if RUN_TUNING:
+MODELS = ["Logistic Regression", "Random Forest", "Gradient-Boosted Trees"]
+TUNED_PARAMS, CV_SCORES = {}, {}
+
+def fit_tuned(name, params):
+    est = ESTIMATORS[name].copy({ESTIMATORS[name].getParam(k): v for k, v in params.items()})
+    model, secs = fit_timed(est)
+    FITTED[name + " (tuned)"] = model
+    evaluate_model(name, model, secs, "tuned")
+    print(f"{name} (tuned {params}): trained in {secs:.1f} s")
+
+if TUNED_PARAMS_OVERRIDE:
+    print("Using tuned parameters from an earlier CrossValidator run (TUNED_PARAMS_OVERRIDE).")
+    TUNED_PARAMS = dict(TUNED_PARAMS_OVERRIDE)
+    CV_SCORES = dict(CV_SCORES_OVERRIDE or {})
+    for name in MODELS:
+        if name in TUNED_PARAMS:
+            fit_tuned(name, TUNED_PARAMS[name])
+elif RUN_TUNING:
     tune_df = train_df.sample(fraction=min(1.0, TUNING_SAMPLE_FRACTION / max(TRAIN_SAMPLE_FRACTION, 1e-9)),
                               seed=SEED).cache()
     print(f"Tuning sample: {tune_df.count():,} rows")
@@ -887,16 +918,21 @@ if RUN_TUNING:
         for pm, score in zip(grid, cv_model.avgMetrics):
             cv_rows.append({"model": name, "params": json.dumps({p.name: v for p, v in pm.items()}),
                             "cv_pr_auc": score, "best": pm == grid[best_i]})
-        print(f"{name}: best {TUNED_PARAMS[name]}  (CV PR-AUC {cv_model.avgMetrics[best_i]:.4f}, {cv_secs:.0f} s)")
-
-        tuned_est = ESTIMATORS[name].copy(grid[best_i])
-        model, secs = fit_timed(tuned_est)
-        FITTED[name + " (tuned)"] = model
-        evaluate_model(name, model, secs, "tuned")
-    pd.DataFrame(cv_rows).to_csv(f"{TABLE_DIR}/cross_validation_grid.csv", index=False)
+        CV_SCORES[name] = float(cv_model.avgMetrics[best_i])
+        print(f"{name}: best {TUNED_PARAMS[name]}  (CV PR-AUC {CV_SCORES[name]:.4f}, {cv_secs:.0f} s)")
+        pd.DataFrame(cv_rows).to_csv(f"{TABLE_DIR}/cross_validation_grid.csv", index=False)   # checkpoint
+        fit_tuned(name, TUNED_PARAMS[name])
     tune_df.unpersist()
 else:
     print("RUN_TUNING is False, so tuning is skipped.")
+
+# safety net: every model must exist in some form before the comparison
+for name in MODELS:
+    if name not in FITTED and name + " (tuned)" not in FITTED:
+        print(f"{name}: no fitted model yet, fitting the default configuration.")
+        model, secs = fit_timed(ESTIMATORS[name])
+        FITTED[name] = model
+        evaluate_model(name, model, secs, "baseline")
 
 # %% [markdown]
 # ## 14. Model comparison
@@ -906,8 +942,7 @@ results = pd.DataFrame(RESULTS)
 results.to_csv(f"{TABLE_DIR}/model_results_all.csv", index=False)
 
 # The headline table: per model, the best stage (tuned if available) at the validation-tuned threshold
-final_stage = "tuned" if RUN_TUNING else "baseline"
-headline = (results[(results["stage"].isin([final_stage, "baseline"])) & (results["threshold_rule"] != "0.50 (default)")]
+headline = (results[results["threshold_rule"] != "0.50 (default)"]
             .sort_values("stage", key=lambda s: s.map({"baseline": 1, "tuned": 0}))
             .drop_duplicates("model"))
 headline = headline.set_index("model").loc[["Majority baseline", "Logistic Regression", "Random Forest", "Gradient-Boosted Trees"]]
@@ -915,7 +950,6 @@ cols = ["stage", "threshold", "accuracy", "precision", "recall", "f1", "roc_auc"
 headline[cols].to_csv(f"{TABLE_DIR}/model_results_headline.csv")
 print(headline[cols].round(4).to_string())
 
-MODELS = ["Logistic Regression", "Random Forest", "Gradient-Boosted Trees"]
 def final_model(name):
     return FITTED.get(name + " (tuned)", FITTED[name])
 
@@ -1065,8 +1099,80 @@ ax.set_title("GBT permutation importance (test sample)"); ax.grid(axis="y", visi
 save_fig(fig, "12_gbt_permutation_importance")
 
 # %% [markdown]
-# ## 16. Temporal hold-out: train Jan–Sep, test Oct–Dec
-# A random split lets the model learn from days that are in the test set (the same storm, the same holiday week). In production, the model would always predict the *future*. Here the whole feature pipeline (target encoders included) is refitted on January–September only and evaluated on October–December. A drop compared with the random split tells us how much of the performance was "seen-it-before" knowledge.
+# ## 16. Export results and models
+
+# %%
+summary = {
+    "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
+    "spark_version": spark.version, "cores": N_CORES, "driver_memory_gb": DRIVER_MEM_GB,
+    "rows_raw": int(n_raw), "rows_clean": int(n_clean), "positive_rate": POS_RATE,
+    "split_sizes": split_sizes, "train_sample_fraction": TRAIN_SAMPLE_FRACTION,
+    "features": FEATURE_NAMES, "tuned_params": TUNED_PARAMS,
+    "csv_vs_parquet_seconds": {"csv": csv_s, "parquet": parquet_s},
+    "headline": headline[cols].reset_index().to_dict(orient="records"),
+}
+with open(f"{OUTPUT_DIR}/run_summary.json", "w") as fh:
+    json.dump(summary, fh, indent=2, default=str)
+
+if SAVE_MODELS:
+    feature_model.write().overwrite().save(f"{MODEL_DIR}/feature_pipeline")
+    for m in MODELS:
+        final_model(m).write().overwrite().save(f"{MODEL_DIR}/{m.replace(' ', '_').replace('-', '_').lower()}")
+
+shutil.make_archive(f"{LOCAL_WORK}/bdmla_outputs", "zip", OUTPUT_DIR, ".")
+print("Outputs folder :", OUTPUT_DIR)
+for p in sorted(glob.glob(f"{OUTPUT_DIR}/**/*", recursive=True)):
+    if os.path.isfile(p) and "/models/" not in p and "staged_2025" not in p:
+        print("  ", os.path.relpath(p, OUTPUT_DIR))
+
+# %% [markdown]
+# ### 16.1 Numbers to copy into the report
+# This cell prints every value the report template asks for, keyed by its placeholder name (e.g. `[RAW_ROWS]`).
+
+# %%
+def fmt_pct(v): return f"{v:.2%}"
+ph = {
+    "RAW_ROWS": f"{n_raw:,}", "CLEAN_ROWS": f"{n_clean:,}", "DELAY_RATE": fmt_pct(POS_RATE),
+    "CANCELLED_ROWS": f"{status['cancelled']:,}", "DIVERTED_ROWS": f"{status['diverted']:,}",
+    "TRAIN_ROWS_USED": f"{split_sizes['train_used']:,}", "TEST_ROWS": f"{split_sizes['test']:,}",
+    "CSV_SECONDS": f"{csv_s:.1f}", "PARQUET_SECONDS": f"{parquet_s:.1f}", "PARQUET_SPEEDUP": f"{csv_s / parquet_s:.1f}x",
+    "BASELINE_ACCURACY": fmt_pct(headline.loc["Majority baseline", "accuracy"]),
+}
+short = {"Logistic Regression": "LR", "Random Forest": "RF", "Gradient-Boosted Trees": "GBT"}
+for m in MODELS:
+    for k in ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]:
+        ph[f"{short[m]}_{k.upper()}"] = f"{float(headline.loc[m, k]):.3f}"
+    ph[f"{short[m]}_TRAIN_S"] = f"{float(headline.loc[m, 'train_seconds']):.0f}"
+    ph[f"{short[m]}_THRESHOLD"] = f"{float(headline.loc[m, 'threshold']):.3f}"
+for i, r in funnel_df.reset_index(drop=True).iterrows():
+    ph[f"FUNNEL_{i}_ROWS"] = f"{int(r['rows']):,}"
+    ph[f"FUNNEL_{i}_REMOVED"] = f"{int(r['removed']):,}"
+ph["N_CORES"] = str(N_CORES)
+ph["SPARK_VERSION"] = spark.version
+ph["TRAIN_SAMPLE_PCT"] = f"{TRAIN_SAMPLE_FRACTION:.0%}"
+ph["VALID_ROWS"] = f"{split_sizes['validation']:,}"
+ph["N_FEATURES"] = str(len(FEATURE_NAMES))
+hm = headline.loc[MODELS].astype({"f1": float, "roc_auc": float, "pr_auc": float, "train_seconds": float})
+ph["BEST_F1_MODEL"]  = hm["f1"].idxmax()
+ph["BEST_F1_VALUE"]  = f"{hm['f1'].max():.3f}"
+ph["BEST_AUC_MODEL"] = hm["roc_auc"].idxmax()
+ph["FASTEST_MODEL"]  = hm["train_seconds"].idxmin()
+ph["SLOWEST_MODEL"]  = hm["train_seconds"].idxmax()
+gbt_top = (importances[importances.model == "Gradient-Boosted Trees"].sort_values("importance", ascending=False)["feature"]
+           .head(5).tolist())
+for i, fname in enumerate(gbt_top, 1):
+    ph[f"GBT_TOP_FEATURE_{i}"] = fname
+for m in MODELS:
+    ph[f"{short[m]}_TUNED_PARAMS"] = ", ".join(f"{k}={v}" for k, v in TUNED_PARAMS.get(m, {}).items()) or "not tuned"
+    ph[f"{short[m]}_CV_PR_AUC"] = f"{CV_SCORES[m]:.3f}" if m in CV_SCORES else "n/a"
+for k, v in ph.items():
+    print(f"[{k}]".ljust(24), v)
+with open(f"{OUTPUT_DIR}/report_placeholders.json", "w") as fh:
+    json.dump(ph, fh, indent=2)
+
+# %% [markdown]
+# ## 17. Temporal hold-out: train Jan–Sep, test Oct–Dec
+# Runs after the export so the main results are already saved if Colab disconnects here. A random split lets the model learn from days that are in the test set (the same storm, the same holiday week). In production, the model would always predict the *future*. Here the whole feature pipeline (target encoders included) is refitted on January–September only and evaluated on October–December. A drop compared with the random split tells us how much of the performance was "seen-it-before" knowledge.
 
 # %%
 if RUN_TEMPORAL_HOLDOUT:
@@ -1109,83 +1215,16 @@ if RUN_TEMPORAL_HOLDOUT:
     ax.set_title("Random vs temporal evaluation (ROC-AUC)"); ax.legend(loc="upper left"); ax.grid(axis="x", visible=False)
     save_fig(fig, "13_random_vs_temporal")
     t_train.unpersist(); t_test.unpersist()
-else:
-    print("RUN_TEMPORAL_HOLDOUT is False, so this section is skipped.")
-
-# %% [markdown]
-# ## 17. Export results and models
-
-# %%
-summary = {
-    "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
-    "spark_version": spark.version, "cores": N_CORES, "driver_memory_gb": DRIVER_MEM_GB,
-    "rows_raw": int(n_raw), "rows_clean": int(n_clean), "positive_rate": POS_RATE,
-    "split_sizes": split_sizes, "train_sample_fraction": TRAIN_SAMPLE_FRACTION,
-    "features": FEATURE_NAMES, "tuned_params": TUNED_PARAMS,
-    "csv_vs_parquet_seconds": {"csv": csv_s, "parquet": parquet_s},
-    "headline": headline[cols].reset_index().to_dict(orient="records"),
-}
-with open(f"{OUTPUT_DIR}/run_summary.json", "w") as fh:
-    json.dump(summary, fh, indent=2, default=str)
-
-if SAVE_MODELS:
-    feature_model.write().overwrite().save(f"{MODEL_DIR}/feature_pipeline")
-    for m in MODELS:
-        final_model(m).write().overwrite().save(f"{MODEL_DIR}/{m.replace(' ', '_').replace('-', '_').lower()}")
-
-shutil.make_archive(f"{LOCAL_WORK}/bdmla_outputs", "zip", OUTPUT_DIR, ".")
-print("Outputs folder :", OUTPUT_DIR)
-for p in sorted(glob.glob(f"{OUTPUT_DIR}/**/*", recursive=True)):
-    if os.path.isfile(p) and "/models/" not in p and "staged_2025" not in p:
-        print("  ", os.path.relpath(p, OUTPUT_DIR))
-
-# %% [markdown]
-# ### 17.1 Numbers to copy into the report
-# This cell prints every value the report template asks for, keyed by its placeholder name (e.g. `[RAW_ROWS]`).
-
-# %%
-def fmt_pct(v): return f"{v:.2%}"
-ph = {
-    "RAW_ROWS": f"{n_raw:,}", "CLEAN_ROWS": f"{n_clean:,}", "DELAY_RATE": fmt_pct(POS_RATE),
-    "CANCELLED_ROWS": f"{status['cancelled']:,}", "DIVERTED_ROWS": f"{status['diverted']:,}",
-    "TRAIN_ROWS_USED": f"{split_sizes['train_used']:,}", "TEST_ROWS": f"{split_sizes['test']:,}",
-    "CSV_SECONDS": f"{csv_s:.1f}", "PARQUET_SECONDS": f"{parquet_s:.1f}", "PARQUET_SPEEDUP": f"{csv_s / parquet_s:.1f}x",
-    "BASELINE_ACCURACY": fmt_pct(headline.loc["Majority baseline", "accuracy"]),
-}
-short = {"Logistic Regression": "LR", "Random Forest": "RF", "Gradient-Boosted Trees": "GBT"}
-for m in MODELS:
-    for k in ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]:
-        ph[f"{short[m]}_{k.upper()}"] = f"{float(headline.loc[m, k]):.3f}"
-    ph[f"{short[m]}_TRAIN_S"] = f"{float(headline.loc[m, 'train_seconds']):.0f}"
-    ph[f"{short[m]}_THRESHOLD"] = f"{float(headline.loc[m, 'threshold']):.3f}"
-for i, r in funnel_df.reset_index(drop=True).iterrows():
-    ph[f"FUNNEL_{i}_ROWS"] = f"{int(r['rows']):,}"
-    ph[f"FUNNEL_{i}_REMOVED"] = f"{int(r['removed']):,}"
-ph["N_CORES"] = str(N_CORES)
-ph["SPARK_VERSION"] = spark.version
-ph["TRAIN_SAMPLE_PCT"] = f"{TRAIN_SAMPLE_FRACTION:.0%}"
-ph["VALID_ROWS"] = f"{split_sizes['validation']:,}"
-ph["N_FEATURES"] = str(len(FEATURE_NAMES))
-hm = headline.loc[MODELS].astype({"f1": float, "roc_auc": float, "pr_auc": float, "train_seconds": float})
-ph["BEST_F1_MODEL"]  = hm["f1"].idxmax()
-ph["BEST_F1_VALUE"]  = f"{hm['f1'].max():.3f}"
-ph["BEST_AUC_MODEL"] = hm["roc_auc"].idxmax()
-ph["FASTEST_MODEL"]  = hm["train_seconds"].idxmin()
-ph["SLOWEST_MODEL"]  = hm["train_seconds"].idxmax()
-gbt_top = (importances[importances.model == "Gradient-Boosted Trees"].sort_values("importance", ascending=False)["feature"]
-           .head(5).tolist())
-for i, fname in enumerate(gbt_top, 1):
-    ph[f"GBT_TOP_FEATURE_{i}"] = fname
-for m in MODELS:
-    ph[f"{short[m]}_TUNED_PARAMS"] = ", ".join(f"{k}={v}" for k, v in TUNED_PARAMS.get(m, {}).items()) or "not tuned"
-if RUN_TEMPORAL_HOLDOUT:
+    with open(f"{OUTPUT_DIR}/report_placeholders.json") as fh:
+        ph = json.load(fh)
     for m in MODELS:
         ph[f"{short[m]}_TEMPORAL_ROC_AUC"] = f"{temporal.loc[m, 'roc_auc']:.3f}"
         ph[f"{short[m]}_TEMPORAL_F1"] = f"{temporal.loc[m, 'f1']:.3f}"
-for k, v in ph.items():
-    print(f"[{k}]".ljust(24), v)
-with open(f"{OUTPUT_DIR}/report_placeholders.json", "w") as fh:
-    json.dump(ph, fh, indent=2)
+    with open(f"{OUTPUT_DIR}/report_placeholders.json", "w") as fh:
+        json.dump(ph, fh, indent=2)
+    print("Temporal results added to report_placeholders.json")
+else:
+    print("RUN_TEMPORAL_HOLDOUT is False, so this section is skipped.")
 
 # %% [markdown]
 # ## 18. Scale-out experiment: same job on 1 core vs all cores
