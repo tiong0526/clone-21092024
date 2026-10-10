@@ -9,9 +9,9 @@ Binary classification (`DELAYED = 1` if `ARR_DELAY ≥ 15`) on all twelve 2025 B
 | Path | What it is |
 |---|---|
 | `notebook/BDMLA_Flight_Delay_Spark.ipynb` | **The Colab notebook** (the project's source code). Runs end-to-end from Google Drive. |
-| `notebook/executed/BDMLA_Flight_Delay_Spark_full_run.ipynb` | The completed full run on the real data, with all outputs (Spark 4.0.4 on Colab). |
+| `notebook/executed/BDMLA_Flight_Delay_Spark_full_run.ipynb` | The completed full run on the real data, with all outputs (Spark 4.0.4 on Colab), plus 26 markdown *Interpretation* cells explaining each result (code and outputs unchanged). **Submit this one.** |
 | `results/` | Figures and `report_placeholders.json` extracted from that run; the report and deck are built from these. |
-| `report/BDMLA_CW2_Part2_Flight_Delay_Report.docx` | **CW2 Part 2 report**, filled with the real results (~2,190 words of main text, against the brief's 2,000-word target). Only the student ID remains to add. |
+| `report/BDMLA_CW2_Part2_Flight_Delay_Report.docx` | **CW2 Part 2 report**, filled with the real results (~2,260 words of main text, against the brief's 2,000-word target). Only the student ID remains to add. |
 | `presentation/BDMLA_CW1_Flight_Delay_Presentation.pptx` | **CW1 deck** on the University of Portsmouth template (from the module's sample deck), filled with the real results: 17 slides, ~10 min, a full ~10-minute recording script with timings in the speaker notes. Only your name/ID remains to add. Built by `tools/build_deck_uop.py` (python-pptx) from `tools/uop_template.pptx`. |
 | `docs/distinction_improvements.md` | What's implemented for each distinction area, optional extras, and a submission checklist. |
 | `assets/` | Architecture diagrams used by the report and deck. |
