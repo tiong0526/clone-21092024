@@ -200,7 +200,7 @@ text(s, X0, Y0 + 1.45, W, 3.4, [
 # ------------------------------------------------------------------ 4. objectives and scope
 s = new_slide("OBJECTIVES AND SCOPE")
 text(s, X0, Y0, 4.4, 0.4, [("Objectives", {"color": PURPLE, "bold": True})], size=18)
-objs = ["Ingest, union and clean all 12 monthly files in Spark", "Engineer leakage-free, pre-departure features",
+objs = ["Ingest, union and clean all 12 monthly files in Spark", "Engineer features from schedule information only",
         "Train LR, Random Forest and GBT in Spark MLlib", "Evaluate with imbalance-aware metrics + training time",
         "Show how the pipeline scales out"]
 for i, o in enumerate(objs):
@@ -291,6 +291,7 @@ text(s, 5.4, Y0 + 0.7, 3.85, 3.9, [
     "ARR_DELAY only builds the label, then it is dropped",
     "Schedule counts use the full schedule, before cancelled flights are removed",
     "An assertion stops the run if a forbidden column reaches the features",
+    "Remaining risks: same-day aircraft swaps, in-sample target encoding",
 ], size=13, bullets=True)
 
 # ------------------------------------------------------------------ 10. feature engineering
@@ -305,7 +306,7 @@ for i, (t, d, c) in enumerate(groups):
     label_box(s, x + 0.2, y + 0.2, 0.18, 1.1, "", fill=c)
     text(s, x + 0.55, y + 0.15, 3.7, 0.4, [t], size=16, bold=True)
     text(s, x + 0.55, y + 0.58, 3.7, 0.85, [d], size=12, color=MUTED)
-text(s, X0, Y0 - 0.3, W, 0.3, [f"{V('N_FEATURES')} features, all known before departure"], size=13, color=MUTED)
+text(s, X0, Y0 - 0.3, W, 0.3, [f"{V('N_FEATURES')} features, built from the published schedule"], size=13, color=MUTED)
 box(s, X0, Y0 + 3.55, W, 1.1, fill=PLUM)
 text(s, X0 + 0.3, Y0 + 3.55, W - 0.6, 1.1, [("High-cardinality categories → smoothed target encoding. ", {"color": WHITE, "bold": True}),
      ("Origin, destination, route, origin×hour and carrier×origin become their historical delay rate, fitted on the training split only.", {"color": WHITE})],
@@ -358,67 +359,107 @@ for ri, row in enumerate(rows):
         cell.fill.solid()
         cell.fill.fore_color.rgb = PURPLE if ri == 0 else (WHITE if ri % 2 else LIGHT)
         r.font.color.rgb = WHITE if ri == 0 else (MODEL[MODELS[ri - 1]] if ci == 0 and 1 <= ri <= 3 else INK)
-text(s, 5.7, Y0 + 2.45, 3.75, 2.2, [
-    f"**Best: **{V('BEST_F1_MODEL')} (F1 {V('BEST_F1_VALUE')}, ROC-AUC {V('GBT_ROC_AUC')})",
-    f"**Tuning: **Random Forest {V('RF_BASE_ROC_AUC')} → {V('RF_ROC_AUC')} ROC-AUC, but twice the training time",
+text(s, 5.7, Y0 + 2.45, 3.75, 2.3, [
+    f"**Best (random split): **{V('BEST_F1_MODEL')}, F1 {V('BEST_F1_VALUE')}, ROC-AUC {V('GBT_ROC_AUC')}",
+    f"**In plain terms: **GBT catches ~60% of delays, but ~6 in 10 of its alerts are false alarms",
     "**Accuracy trap: **doing nothing scores higher accuracy than every model",
 ], size=12, bullets=True)
 
 # ------------------------------------------------------------------ 13. what drives it / temporal test
 s = new_slide("WHAT DRIVES DELAYS")
-picture(s, fig("12_gbt_permutation_importance.png"), X0, Y0, 4.6, 3.4)
+picture(s, fig("12_gbt_permutation_importance.png"), X0, Y0, 4.5, 3.1)
 if all(f"{SHORT[m]}_TEMPORAL_ROC_AUC" in PH for m in MODELS):
-    cd = CategoryChartData(); cd.categories = ["LR", "RF", "GBT"]
-    cd.add_series("Random split", [num(f"{SHORT[m]}_ROC_AUC") for m in MODELS])
-    cd.add_series("Temporal (Oct–Dec)", [num(f"{SHORT[m]}_TEMPORAL_ROC_AUC") for m in MODELS])
-    gf = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(5.15), Inches(Y0), Inches(4.3), Inches(3.4), cd)
-    ch = gf.chart; style_chart(ch, size=10); chart_title(ch, "ROC-AUC: random vs temporal test")
-    ch.value_axis.minimum_scale = 0.5; ch.value_axis.maximum_scale = 0.8
-    plot = ch.plots[0]; plot.gap_width = 60; plot.has_data_labels = True
-    plot.data_labels.number_format = "0.000"; plot.data_labels.number_format_is_linked = False; plot.data_labels.font.size = Pt(9)
-    plot.data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
-    for ser, c in zip(plot.series, (PURPLE, RGBColor(0xAD, 0x84, 0xC6))):
-        ser.format.fill.solid(); ser.format.fill.fore_color.rgb = c
-text(s, X0, Y0 + 3.55, W, 1.4, [
+    hdr = ("", "ROC-AUC\nrandom", "ROC-AUC\nOct–Dec", "F1\nrandom", "F1\nOct–Dec")
+    trows = [hdr] + [(SHORT[m], V(f"{SHORT[m]}_ROC_AUC"), V(f"{SHORT[m]}_TEMPORAL_ROC_AUC"), V(f"{SHORT[m]}_F1"), V(f"{SHORT[m]}_TEMPORAL_F1")) for m in MODELS]
+    tbl = s.shapes.add_table(len(trows), 5, Inches(5.1), Inches(Y0 + 0.35), Inches(4.35), Inches(2.4)).table
+    for ci, wd in enumerate((0.75, 0.9, 0.9, 0.9, 0.9)):
+        tbl.columns[ci].width = Inches(wd)
+    # best value per evaluation column (bold + purple fill) so RF's higher temporal F1 is visible
+    best = {ci: max(range(1, 4), key=lambda ri: float(trows[ri][ci])) for ci in range(1, 5)}
+    for ri, row in enumerate(trows):
+        for ci, val in enumerate(row):
+            cell = tbl.cell(ri, ci); cell.margin_left = cell.margin_right = Inches(0.04)
+            tf = cell.text_frame
+            for k, part in enumerate(val.split("\n")):
+                para = tf.paragraphs[0] if k == 0 else tf.add_paragraph()
+                para.alignment = PP_ALIGN.LEFT if ci == 0 else PP_ALIGN.CENTER
+                r = para.add_run(); r.text = part; r.font.size = Pt(11 if ri else 10)
+                is_best = ri > 0 and ci > 0 and best[ci] == ri
+                r.font.bold = ri == 0 or ci == 0 or is_best
+                r.font.color.rgb = WHITE if ri == 0 or is_best else (MODEL[MODELS[ri - 1]] if ci == 0 else INK)
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = PURPLE if ri == 0 else (RGBColor(0x8E, 0x4A, 0x8C) if best.get(ci) == ri and ci > 0 else (WHITE if ri % 2 else LIGHT))
+    text(s, 5.1, Y0, 4.35, 0.3, [("Random split vs temporal test (train Jan–Sep, test Oct–Dec)", {"bold": True})], size=12)
+text(s, X0, Y0 + 3.3, W, 1.6, [
     "**Top drivers: **the airport's historical delay rate at that hour, and the scheduled turnaround time.",
-    f"**Honest test: **trained on Jan–Sep, tested on Oct–Dec, GBT ROC-AUC drops {V('GBT_ROC_AUC')} → {V('GBT_TEMPORAL_ROC_AUC')}; the random split let trees memorise specific bad days.",
-], size=13, bullets=True)
+    f"**Temporal test: **all models drop; RF has the higher F1 ({V('RF_TEMPORAL_F1')} vs {V('GBT_TEMPORAL_F1')}), GBT a slightly higher ROC-AUC, so the best model depends on the metric.",
+    "**Caveat: **thresholds came from a validation set that includes some Oct–Dec flights.",
+], size=12, bullets=True)
 
 # ------------------------------------------------------------------ 14. challenges
 s = new_slide("CHALLENGES")
-chal = [("Colab disconnected after 3+ hours", "Parquet checkpoint in Drive, results saved after every model, and a resume option that reuses tuned settings"),
-        ("A silent bug on Spark 4", "Feature-importance labels were shifted on Colab's Spark 4.0; a sanity check on the chart caught it, now fixed with an assertion"),
+chal = [("First full run stopped after 3+ hours", "Most likely a Colab session limit; added Parquet checkpoints, saved results after every model, and a resume option"),
+        ("Feature labels shifted between Spark versions", "My code assumed Spark 3.5's metadata order; Colab's Spark 4.0 orders it differently. Spotted when a chart made no sense; fixed by sorting on vector index plus an assertion"),
         ("Target leakage", "Allow-list ingestion and schedule counts computed before cancellations are removed"),
         ("Class imbalance (22% delayed)", "Class weights plus a validation-tuned threshold instead of chasing accuracy"),
         ("3 GB of CSV on a 12 GB machine", "Only 17 columns loaded, then columnar Parquet: same query 25× faster")]
 for i, (t, d) in enumerate(chal):
-    y = Y0 + i * 0.95
+    y = Y0 - 0.1 + i * 1.0
     label_box(s, X0, y + 0.05, 0.5, 0.75, str(i + 1), fill=PURPLE, size=16)
     text(s, X0 + 0.7, y, 8.3, 0.4, [t], size=15, bold=True)
-    text(s, X0 + 0.7, y + 0.38, 8.3, 0.5, [d], size=12, color=MUTED)
+    text(s, X0 + 0.7, y + 0.38, 8.3, 0.55, [d], size=12, color=MUTED)
 
 # ------------------------------------------------------------------ 15. future scope
 s = new_slide("FUTURE SCOPE")
-fut = [("Weather", "Join hourly NOAA weather forecasts: the biggest missing signal"),
-       ("Stronger models", "XGBoost or LightGBM on Spark, with GPU acceleration (RAPIDS)"),
-       ("Real cluster", "Full training data on Google Dataproc, wider tuning grids"),
-       ("Streaming", "Spark Structured Streaming to update predictions on the day"),
-       ("Cleaner encoding", "Out-of-fold target encoding to avoid in-sample bias")]
+fut = [("Weather", "Join hourly NOAA weather forecasts; earlier work found weather improves accuracy"),
+       ("Cleaner validation", "Out-of-fold target encoding inside the CV pipeline; temporal thresholds on a separate month"),
+       ("Ablations", "Compare runs with and without class weights and threshold tuning"),
+       ("Real cluster", "Full data on Google Dataproc, with repeated timing runs"),
+       ("Stronger models", "XGBoost or LightGBM on Spark with GPU acceleration")]
 for i, (t, d) in enumerate(fut):
     x = X0 + (i % 2) * 4.6 if i < 4 else X0 + 2.3; y = Y0 + (i // 2) * 1.6
     box(s, x, y, 4.4, 1.35, fill=LIGHT)
     text(s, x + 0.25, y + 0.15, 3.9, 0.4, [t], size=16, bold=True, color=PURPLE)
     text(s, x + 0.25, y + 0.58, 3.9, 0.7, [d], size=13, color=MUTED)
 
-# ------------------------------------------------------------------ 16. conclusion
+# ------------------------------------------------------------------ 16. what I learnt
+s = new_slide("WHAT I LEARNT")
+learnt = [("Accuracy can mislead", "Predicting 'on time' for every flight beats every model on accuracy; recall, precision and PR-AUC tell the real story"),
+          ("Leakage is subtle", "Dropping post-flight columns was easy; counting flights after cancellations or encoding before CV were not"),
+          ("Evaluate on the future", "The temporal test changed which model looks best"),
+          ("Engineering matters", "Checkpointing, version differences and memory limits took as much effort as modelling")]
+for i, (t, d) in enumerate(learnt):
+    y = Y0 + i * 1.18
+    box(s, X0, y, W, 1.02, fill=LIGHT)
+    label_box(s, X0 + 0.2, y + 0.16, 0.18, 0.7, "", fill=PURPLE if i % 2 else BLUE)
+    text(s, X0 + 0.6, y + 0.1, 8.2, 0.4, [t], size=16, bold=True)
+    text(s, X0 + 0.6, y + 0.5, 8.2, 0.5, [d], size=13, color=MUTED)
+
+# ------------------------------------------------------------------ 17. conclusion
 s = new_slide("CONCLUSION")
 text(s, X0, Y0, W, 4.8, [
-    f"Built a leakage-free Apache Spark pipeline over all {V('RAW_ROWS')} U.S. domestic flights of 2025.",
-    f"{V('BEST_F1_MODEL')} performed best (F1 {V('BEST_F1_VALUE')}, ROC-AUC {V('GBT_ROC_AUC')}), clearly ahead of Logistic Regression, and far cheaper to train than a tuned Random Forest.",
-    "Accuracy is misleading on imbalanced data: class weights, a tuned threshold, PR-AUC and an honest temporal test matter more.",
+    f"Built an Apache Spark pipeline over {V('RAW_ROWS')} U.S. domestic flights of 2025 that excludes post-flight information.",
+    f"On the random test split, {V('BEST_F1_MODEL')} performed best (F1 {V('BEST_F1_VALUE')}, ROC-AUC {V('GBT_ROC_AUC')}); on later, unseen months Random Forest had the higher F1, so the best model depends on how it is used.",
+    "Accuracy is misleading on imbalanced data; recall, precision, PR-AUC and a temporal test give a fairer picture.",
     "Big data tooling made it feasible on free Colab: Parquet, broadcast joins and keeping evaluation inside Spark.",
-    "Schedule-only prediction is possible but limited: weather and on-the-day updates are the way forward.",
+    "Schedule-only prediction is possible but limited; weather data and cleaner validation are the next steps.",
 ], size=16, bullets=True)
+
+# ------------------------------------------------------------------ 18. references
+s = new_slide("REFERENCES")
+refs = [
+    "Ball, M., et al. (2010). Total delay impact study. NEXTOR.",
+    "Belcastro, L., Marozzo, F., Talia, D., & Trunfio, P. (2016). Using scalable data mining for predicting flight delays. ACM TIST, 8(1), 5.",
+    "Breiman, L. (2001). Random forests. Machine Learning, 45(1), 5–32.",
+    "Bureau of Transportation Statistics. (2026). Reporting carrier on-time performance (1987–present) [Data set]. U.S. DOT.",
+    "Friedman, J. H. (2001). Greedy function approximation: A gradient boosting machine. Annals of Statistics, 29(5), 1189–1232.",
+    "Kaufman, S., Rosset, S., Perlich, C., & Stitelman, O. (2012). Leakage in data mining. ACM TKDD, 6(4), 15.",
+    "Meng, X., et al. (2016). MLlib: Machine learning in Apache Spark. JMLR, 17(34), 1–7.",
+    "Micci-Barreca, D. (2001). A preprocessing scheme for high-cardinality categorical attributes. SIGKDD Explorations, 3(1), 27–32.",
+    "Saito, T., & Rehmsmeier, M. (2015). The precision-recall plot is more informative than the ROC plot. PLoS ONE, 10(3), e0118432.",
+    "Zaharia, M., et al. (2016). Apache Spark: A unified engine for big data processing. CACM, 59(11), 56–65.",
+]
+text(s, X0, Y0 - 0.1, W, 4.9, refs, size=11, bullets=False)
 
 # ------------------------------------------------------------------ 17. end slide (template) moved last
 lst = prs.slides._sldIdLst
@@ -469,8 +510,8 @@ SCRIPT = [
     "the schedule features, cleaning and the label. The second row is the machine learning layer: split, encode, train, tune and "
     "evaluate, and finally export every chart and table used in my report.",
     # 8 technology
-    "The technology stack is Apache Spark through PySpark, with MLlib for the models and Spark SQL with Parquet for the data processing, "
-    "Python for plotting, and Google Colab for compute, with the data and checkpoints stored in Google Drive.",
+    "The stack is Spark through PySpark, with MLlib for the models, Spark SQL and Parquet for the data, Python for plotting, and Google "
+    "Colab for compute, with data and checkpoints in Google Drive.",
     # 9 cleaning and leakage
     f"Cleaning followed the brief: remove cancelled and diverted flights and rows with no arrival delay, then duplicates and impossible "
     f"values, which leaves {V('CLEAN_ROWS')} flights. The bigger issue is leakage. Columns such as wheels-on time or the delay-cause "
@@ -478,44 +519,48 @@ SCRIPT = [
     "subtle trap too: if you count flights per hour after removing cancellations, a stormy day looks quiet, and the feature leaks the "
     "outcome. So those counts are calculated on the full schedule first.",
     # 10 feature engineering
-    f"I ended up with {V('N_FEATURES')} features in four groups, all known in advance: calendar and time, including how close the date "
-    "is to a public holiday; basic flight details; airport congestion, meaning how many flights are scheduled at the same airport in the "
-    "same hour; and aircraft rotation, built with a Spark window function over each tail number. Airports and routes have thousands of "
-    "values, which would explode the feature space and break Spark's tree limits, so I replaced each with its smoothed historical delay "
-    "rate, fitted on the training data only.",
+    f"I ended up with {V('N_FEATURES')} features in four groups, all built from the published schedule: calendar and time, including how "
+    "close the date is to a public holiday; basic flight details; airport congestion, meaning how many flights are scheduled at the same "
+    "airport in the same hour; and aircraft rotation, built with a Spark window function over each tail number. Airports and routes have "
+    "thousands of values, which would explode the feature space and break Spark's tree limits, so I replaced each with its smoothed "
+    "historical delay rate, fitted on the training data only.",
     # 11 model pipeline
     "Here is the training pipeline. The data is split 70, 10 and 20 percent into train, validation and test sets. Because Colab only has "
     f"two cores, models were trained on a {V('TRAIN_SAMPLE_PCT')} sample of the training set, but validation and test were always scored "
     "in full. Every model gets class weights, so delayed flights count as much as on-time ones. Each model is tuned with three-fold "
-    "cross-validation on PR-AUC, the decision threshold is chosen on the validation set, and the test set is used only once, at the end.",
+    "cross-validation on PR-AUC, the decision threshold is chosen on the validation set, and the test set is used once, at the end.",
     # 12 results
-    f"These are the test results. Gradient-Boosted Trees came out best, with an F1 of {V('BEST_F1_VALUE')} and a ROC-AUC of "
-    f"{V('GBT_ROC_AUC')}. Notice the last row of the table: a 'model' that always says on time gets {V('BASELINE_ACCURACY')} accuracy "
-    "and catches zero delays. That's why accuracy on its own is misleading here, and why I focus on recall, F1 and PR-AUC instead. Both "
-    "tree models clearly beat Logistic Regression, so the non-linear interactions matter. Tuning improved Random Forest, but doubled its "
-    "training time, and boosting still beat it while training in less than a quarter of the time.",
+    f"These are the results on the random test split. Gradient-Boosted Trees came out best, with an F1 of {V('BEST_F1_VALUE')} and a "
+    f"ROC-AUC of {V('GBT_ROC_AUC')}. In plain terms, it catches about 60 percent of delayed flights, but about six in ten of its delay "
+    f"alerts are false alarms. Notice the last row: a 'model' that always says on time gets {V('BASELINE_ACCURACY')} accuracy and catches "
+    "zero delays, which is why accuracy alone is misleading here. Both tree models achieved a higher ROC-AUC than Logistic Regression, "
+    "which suggests that interactions between the features help.",
     # 13 drivers and temporal test
-    "What is the model actually using? The left chart shows permutation importance: how much accuracy drops when one feature is "
-    "shuffled. The two that matter most are the historical delay rate of that airport at that hour, and the scheduled turnaround time, "
-    "which is the delay-propagation story again. On the right is my strictest test: train on January to September, then predict October "
-    f"to December. ROC-AUC drops from {V('GBT_ROC_AUC')} to {V('GBT_TEMPORAL_ROC_AUC')} for boosting. A random split lets the model "
-    "learn specific storm days that also appear in the test set, so this temporal figure is the honest estimate for real use.",
+    "What is the model using? Permutation importance, on the left, shows the two features that matter most: the historical delay rate "
+    "of that airport at that hour, and the scheduled turnaround time. On the right is a stricter test: train on January to September, "
+    "then predict October to December. All models drop, and the ranking changes: Random Forest has the higher F1, while boosting keeps a "
+    "slightly higher ROC-AUC. So the preferred model depends on the metric and on how it is evaluated. I consider this temporal test more "
+    "relevant to practical use, with one caveat: the thresholds came from a validation set that includes some autumn flights.",
     # 14 challenges
-    "The project had some real challenges. My first full run was disconnected by Colab after more than three hours, so I added Parquet "
-    "checkpoints, saved results after every model, and a resume option that reuses the tuned settings. On Colab's Spark 4, the "
-    "feature-importance labels were silently shifted; I only caught it because Logistic Regression claimed day-of-week was its "
-    "strongest feature, which made no sense. I fixed it and added an assertion. And throughout, I had to control leakage, handle the "
-    "imbalance, and fit three gigabytes into a twelve-gigabyte machine.",
+    "There were some practical challenges. My first full run stopped after more than three hours, most likely because of a Colab session "
+    "limit, so I added checkpoints and a resume option. Feature-importance labels were also shifted: my code assumed the metadata order "
+    "used by Spark 3.5, but Colab ran Spark 4.0, which orders it differently. It was spotted because one chart ranked day-of-week as the "
+    "strongest feature, which made no sense, and it is now fixed with an explicit check. Leakage, imbalance and memory limits also needed care.",
     # 15 future scope
-    "For future work, weather forecasts are the biggest missing signal, so joining NOAA data would come first. I'd also try XGBoost or "
-    "LightGBM on Spark with GPU acceleration, train on the full data on a real Dataproc cluster, where the same code simply runs on more "
-    "executors, and use Spark Structured Streaming to update predictions on the day as earlier flights report delays.",
-    # 16 conclusion
-    "To conclude: I built a complete, leakage-free Spark pipeline over every U.S. domestic flight in 2025, and Gradient-Boosted Trees "
-    "performed best. The biggest lessons were about evaluation rather than algorithms: handling the imbalance, choosing the threshold "
-    "for the business need, and testing honestly on future months. Schedule-only prediction works, but it has a ceiling, so weather data "
-    "and on-the-day updates are where the next gains will come from.",
-    # 17 thank you
+    "For future work, I would add weather forecasts, which earlier studies found improve accuracy; use out-of-fold target encoding inside "
+    "cross-validation; measure the effect of class weights directly; and repeat the training and timing on a real cluster.",
+    # 16 what I learnt
+    "So what did I learn? First, accuracy can be misleading on imbalanced data. Second, leakage is subtle: removing post-flight columns "
+    "was easy, but problems like counting flights after cancellations, or encoding categories before cross-validation, only showed up on "
+    "closer inspection. Third, evaluating on future months changed my view of which model is best. And finally, the engineering side, "
+    "checkpointing, version differences and memory, took as much effort as the modelling.",
+    # 17 conclusion
+    "To conclude: I built a Spark pipeline over every U.S. domestic flight in 2025 that excludes post-flight information. On the random "
+    "split, Gradient-Boosted Trees performed best; on later months, Random Forest had the higher F1. Schedule-only prediction works, but "
+    "it has a ceiling, and weather data and cleaner validation are the natural next steps.",
+    # 18 references
+    "The main references I used are listed here.",
+    # 19 thank you
     "Thank you very much for watching. The full code, results and report are included in my submission.",
 ]
 assert len(SCRIPT) == len(prs.slides), (len(SCRIPT), len(prs.slides))

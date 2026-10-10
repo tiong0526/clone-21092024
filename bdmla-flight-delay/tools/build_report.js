@@ -127,19 +127,19 @@ add(
 
 // ---------- Abstract ----------
 add(H1("Abstract"),
-  P("Flight delays are expensive for airlines and frustrating for passengers, and most of the cost comes from not knowing in advance which flights will run late. In this project I used Apache Spark to build an end-to-end pipeline over all twelve monthly 2025 files of the U.S. Bureau of Transportation Statistics on-time dataset ({{RAW_ROWS}} flights). The goal was to predict, using only information available before departure, whether a flight will arrive at least 15 minutes late. After cleaning and leakage-free feature engineering, I trained and tuned Logistic Regression, Random Forest and Gradient-Boosted Trees with Spark MLlib. I compared them on accuracy, precision, recall, F1, ROC-AUC, PR-AUC and training time. {{BEST_F1_MODEL}} gave the best F1 ({{BEST_F1_VALUE}}), and a stricter temporal test showed how much performance holds up on unseen months."),
+  P("Flight delays are costly for airlines and passengers, and much of that cost comes from not knowing in advance which flights will run late. In this project I used Apache Spark to process all twelve monthly 2025 files of the U.S. Bureau of Transportation Statistics on-time dataset ({{RAW_ROWS}} flights) and to predict whether a flight will arrive at least 15 minutes late using schedule information only. Columns recorded during or after the flight were excluded, and Logistic Regression, Random Forest and Gradient-Boosted Trees were trained and tuned with Spark MLlib. On a random test split, {{BEST_F1_MODEL}} gave the best F1 ({{BEST_F1_VALUE}}) and ROC-AUC ({{GBT_ROC_AUC}}). On a stricter test using later months, all models dropped and Random Forest had the highest F1, which shows that the preferred model depends on how it is evaluated."),
 );
 
 COUNTING = true;
 // ---------- 1 Introduction ----------
 add(H1("1. Introduction"),
   H2("1.1 Background"),
-  P("Flight delays cost the U.S. economy an estimated $32.9 billion in 2007, shared between airlines, passengers and lost demand (Ball et al., 2010). The Bureau of Transportation Statistics (BTS) counts a flight as *delayed* when it arrives 15 or more minutes late, and publishes a record for every domestic flight of the larger U.S. carriers. Millions of labelled rows a year make this a natural big data problem: too large for pandas on one machine, but well suited to Spark."),
+  P("Flight delays cost the U.S. economy an estimated $32.9 billion in 2007 (Ball et al., 2010). The Bureau of Transportation Statistics (BTS) counts a flight as *delayed* when it arrives 15 or more minutes late, and publishes a record for every domestic flight of the larger U.S. carriers. I selected this dataset because it contains several million flight records, giving me the opportunity to apply Spark to a substantial data-processing task rather than a sample that would fit comfortably in pandas."),
   H2("1.2 Problem statement"),
-  P("The question for this project is: **using only information that is known before the aircraft leaves the gate, can we predict whether a flight will arrive 15 or more minutes late?** This is binary classification (DELAYED = 1 if ARR_DELAY ≥ 15, otherwise 0). The \"before departure\" condition matters: many public notebooks on this data report very high accuracy only because they use departure delay or other post-flight columns, which makes the model useless in practice (Kaufman et al., 2012). A schedule-only model could be run the evening before to help plan crews, gates and spare aircraft, or to warn passengers with tight connections."),
+  P("The question is: **using only information known before the aircraft leaves the gate, can we predict whether a flight will arrive 15 or more minutes late?** This is binary classification (DELAYED = 1 if ARR_DELAY ≥ 15). Many public notebooks on this data report high accuracy only because they use departure delay or other post-flight columns, which makes the model useless in practice (Kaufman et al., 2012). A schedule-only model could be run the evening before to help plan crews and spare aircraft."),
   H2("1.3 Objectives"),
   N("Build a scalable Spark pipeline that ingests, unions and cleans all twelve monthly files for 2025."),
-  N("Engineer features that are strictly available before departure, and show that no target leakage is possible."),
+  N("Engineer features from schedule information only, excluding columns recorded during or after the flight."),
   N("Train, tune and compare three Spark MLlib classifiers: Logistic Regression, Random Forest and Gradient-Boosted Trees."),
   N("Evaluate them with metrics that are suitable for an imbalanced target, together with training time."),
   N("Show how the approach would scale out to more processors, a cluster or GPUs."),
@@ -147,20 +147,20 @@ add(H1("1. Introduction"),
 
 // ---------- 2 Related work ----------
 add(H1("2. Related Work"),
-  P("Sternberg et al. (2017) found that most delay studies use classification, with tree models and congestion features recurring. Rebollo and Balakrishnan (2014) and Gui et al. (2020) both found random forests strong, and Belcastro et al. (2016) built a scalable MapReduce pipeline joining flight and weather data. Random forests (Breiman, 2001) and gradient boosting (Friedman, 2001) are both in Spark MLlib (Meng et al., 2016). This project builds on that work with a strict pre-departure leakage policy, schedule-based congestion and aircraft-rotation features, and a comparison of accuracy against training cost on the latest full year."),
+  P("Sternberg et al. (2017) found that most delay studies use classification, with tree models and congestion features recurring. Rebollo and Balakrishnan (2014) and Gui et al. (2020) found random forests strong, and Belcastro et al. (2016) built a scalable MapReduce pipeline joining flight and weather data. Both random forests (Breiman, 2001) and gradient boosting (Friedman, 2001) are available in Spark MLlib (Meng et al., 2016). This project adds a strict pre-departure feature policy, aircraft-rotation features and a temporal evaluation on the latest full year."),
 );
 
 // ---------- 3 Dataset ----------
 add(H1("3. Dataset Selection, Exploration and Preparation"),
   H2("3.1 Source and rationale"),
-  P("The data is the BTS *Reporting Carrier On-Time Performance* table (Bureau of Transportation Statistics, 2026). Each row is one domestic flight by a carrier with at least 0.5% of U.S. domestic passenger revenue, with date, carrier, tail number, airports, scheduled and actual times, cancellation and diversion flags, and delay minutes by cause. I downloaded the twelve 2025 monthly CSVs (220 to 280 MB each, about 3 GB) to Google Drive. The data is real, official and recent, has an industry-standard label, and at {{RAW_ROWS}} rows is large enough to justify Spark while still workable in Colab."),
+  P("The data is the BTS *Reporting Carrier On-Time Performance* table (Bureau of Transportation Statistics, 2026): one row per domestic flight, with date, carrier, tail number, airports, scheduled and actual times, cancellation and diversion flags, and delay minutes by cause. I downloaded the twelve 2025 monthly CSVs (220 to 280 MB each, about 3 GB) to Google Drive. At {{RAW_ROWS}} rows with an industry-standard label, it is large enough to justify Spark while remaining workable in Colab."),
   ...figure("01_class_balance.png", "Figure 1. Class balance after cleaning (DELAYED = 1 when ARR_DELAY ≥ 15 minutes).", 4.6),
   H2("3.2 Exploration"),
-  P("After cleaning, {{DELAY_RATE}} of flights are delayed (Figure 1). The data is therefore imbalanced: a model that always predicts \"on time\" would already score {{BASELINE_ACCURACY}} accuracy. Figure 2 breaks the delay rate down by month, day of week, scheduled departure hour and airline. Delays peak in the summer (about 29% in July) and in December, and are lowest in September (about 17%). Sundays are worst, and airlines range from about 17% (Hawaiian) to 28% (Frontier). The clearest pattern is by hour: about 9% of 5am departures arrive late, rising to about 33% at 7pm, which is how delays propagate as late aircraft carry delay into their next legs. Figure 3 supports this. An aircraft's first leg of the day is late about 15% of the time, its seventh about 34%, and a scheduled turnaround under 40 minutes gives a 38% delay rate against about 21% for 60 to 179 minutes. "),
+  P("After cleaning, {{DELAY_RATE}} of flights are delayed (Figure 1), so the data is imbalanced: always predicting \"on time\" would score {{BASELINE_ACCURACY}} accuracy. Delays peak in July (about 29%) and December and are lowest in September (about 17%); Sundays are worst, and airlines range from about 17% to 28% (Figure 2). The clearest pattern is by hour: about 9% of 5am departures arrive late, against about 33% at 7pm, consistent with delays carrying over to later legs. Figure 3 supports this: an aircraft's first leg is late about 15% of the time and its seventh about 34%, and turnarounds under 40 minutes have a 38% delay rate, against about 21% for 60 to 179 minutes."),
   ...figure("03_delay_rate_patterns.png", "Figure 2. Delay rate by month, day of week, scheduled departure hour and reporting airline."),
   ...figure("04_airport_and_rotation_patterns.png", "Figure 3. Delay rate at the 20 busiest origin airports, by scheduled turnaround, and by aircraft leg of the day."),
   H2("3.3 Cleaning"),
-  P("Cancelled and diverted flights were removed because they have no arrival-delay label, then null ARR_DELAY rows, duplicates and impossible schedule values (Table 1). Almost all missing ARR_DELAY values belonged to cancelled or diverted flights. Missing tail numbers were kept: the rotation features for those flights were filled with a neutral value and a HAS_PREV_LEG indicator."),
+  P("Cancelled and diverted flights were removed because they have no arrival-delay label, then null ARR_DELAY rows, duplicates and impossible schedule values (Table 1). Missing tail numbers were kept, with a neutral rotation value and a HAS_PREV_LEG flag."),
   table(["Step", "Rows remaining", "Rows removed"], [
     ["Raw flights (12 files)", "{{FUNNEL_0_ROWS}}", "-"],
     ["Remove cancelled", "{{FUNNEL_1_ROWS}}", "{{FUNNEL_1_REMOVED}}"],
@@ -170,8 +170,8 @@ add(H1("3. Dataset Selection, Exploration and Preparation"),
     ["Remove invalid schedule values", "{{FUNNEL_5_ROWS}}", "{{FUNNEL_5_REMOVED}}"],
   ], [4300, 2300, 2300]),
   caption("Table 1. Cleaning funnel (from tables/cleaning_funnel.csv)."),
-  H2("3.4 Preventing target leakage"),
-  P("Leakage was the main risk, so I handled it at three levels. First, an **allow-list** loads only 17 of the 110 raw columns, so post-flight fields never enter the DataFrame. I also excluded **DEP_TIME, DEP_DELAY, TAXI_OUT and DEP_DEL15**: they were not on the original list, but they are unknown before departure and strongly predict arrival delay. ARR_DELAY only builds the label and is then dropped. Second, an assertion checks the feature list against the forbidden columns (Appendix C). Third, the schedule counts (such as flights per hour at an airport) are computed on the **full schedule before cancellations are removed**. Otherwise a stormy day would show fewer flights and the feature would quietly encode the outcome."),
+  H2("3.4 Reducing target leakage"),
+  P("Leakage was the main risk, so I tried to control it at three levels. First, an **allow-list** loads only 17 of the 110 raw columns, so post-flight fields never enter the DataFrame; I also excluded **DEP_TIME, DEP_DELAY, TAXI_OUT and DEP_DEL15**, which are unknown before departure, and ARR_DELAY is dropped once the label is built. Second, an assertion checks the features against the forbidden columns (Appendix C). Third, schedule counts such as flights per hour are computed **before cancellations are removed**; otherwise a stormy day would look quiet and the feature would encode the outcome. This removes direct post-flight predictors, but does not make the features completely leakage-free (Section 7.1)."),
 );
 
 // ---------- 4 Framework ----------
@@ -181,21 +181,20 @@ add(H1("4. Big Data Framework and Architecture"),
   P("Spark turns a job into a DAG of stages, each made of parallel tasks, one per data partition (Zaharia et al., 2016). Because transformations are lazy, the Catalyst optimiser sees the whole query and can push the column allow-list down to the file scan (Armbrust et al., 2015). In Colab the driver and executor share one VM ({{N_CORES}} cores) in *local mode* (Figure 5). The same code runs on a YARN or Kubernetes cluster by changing the master URL."),
   ...figure("spark_architecture.png", "Figure 5. Spark execution model: in Colab the driver and executor share one VM; on a cluster, tasks are spread across executors.", 5.6),
   P("These optimisations made a full year practical on free Colab:"),
-  B("**CSV to Parquet once.** The unioned, typed data is written once to columnar Parquet, which every later step reads. The same aggregation took {{CSV_SECONDS}} s on CSV and {{PARQUET_SECONDS}} s on Parquet ({{PARQUET_SPEEDUP}} faster). The copy in Drive also acts as a checkpoint if Colab disconnects."),
-  B("**Fewer shuffle partitions plus Adaptive Query Execution**, since the default 200 creates many tiny tasks on two cores."),
-  B("**Broadcast joins** for the small target-encoding tables and **caching** of the model-ready datasets, which tree models scan many times."),
-  B("**Single-pass evaluation:** confusion matrices and the F1 for 37 thresholds are each one Spark aggregation, not a collect to the driver."),
+  B("**CSV to Parquet once:** the same aggregation took {{CSV_SECONDS}} s on CSV and {{PARQUET_SECONDS}} s on Parquet ({{PARQUET_SPEEDUP}} faster), and the Drive copy acts as a checkpoint."),
+  B("**Fewer shuffle partitions** plus Adaptive Query Execution, **broadcast joins** for the encoding tables and **caching** of model-ready data."),
+  B("**Single-pass evaluation:** confusion matrices and F1 for 37 thresholds are each one Spark aggregation."),
   H2("4.1 Scale-out"),
-  P("To test scale-out, the notebook restarts Spark with 1 and {{SCALE_MAX_CORES}} cores and times the same workload. A full aggregation pass went from {{SCALE_AGG_1CORE_S}} s to {{SCALE_AGG_NCORE_S}} s ({{SCALE_AGG_SPEEDUP}}; above-linear partly because the first run warmed the caches), but a Logistic Regression fit on a cached 20% sample barely changed ({{SCALE_LR_SPEEDUP}}). Each L-BFGS iteration is a short job dominated by driver work and scheduling, so its per-partition gradients only pay off with far more data per task, as on a cluster. Random Forest trees are independent, while boosting is sequential across iterations. On Dataproc or Databricks the notebook runs unchanged with more executors, and the RAPIDS Accelerator for Apache Spark and XGBoost's Spark integration add GPU acceleration (Chen & Guestrin, 2016)."),
+  P("As an exploratory local benchmark, the notebook times the same workload once with 1 and {{SCALE_MAX_CORES}} cores. A full aggregation went from {{SCALE_AGG_1CORE_S}} s to {{SCALE_AGG_NCORE_S}} s ({{SCALE_AGG_SPEEDUP}}), but the 1-core run went first, so warmer caches probably explain part of this; repeated runs with median timings would be needed for a firm claim. A Logistic Regression fit on a cached 20% sample barely changed ({{SCALE_LR_SPEEDUP}}), as each iteration is a short, overhead-dominated job. On Dataproc or Databricks the notebook would run unchanged with more executors, and RAPIDS and XGBoost's Spark integration offer GPU acceleration (Chen & Guestrin, 2016)."),
 );
 
 // ---------- 5 Methodology ----------
 add(H1("5. Methodology and Implementation"),
   H2("5.1 Feature engineering"),
   P("I ended up with {{N_FEATURES}} features in four groups (the full list is in Appendix B):"),
-  B("**Calendar and time:** month, day of month, day of week, weekend flag, scheduled departure and arrival hour, sine/cosine encodings of hour and month (so that 23:00 sits next to 00:00 for the linear model), and days to the nearest U.S. federal holiday."),
+  B("**Calendar and time:** month, day, weekday, weekend flag, scheduled departure and arrival hour (with sine/cosine encodings) and days to the nearest federal holiday."),
   B("**Flight:** scheduled elapsed time, distance and airline (one-hot, about 15 carriers)."),
-  B("**Congestion (from the schedule):** scheduled departures from the origin in the same hour, arrivals at the destination in the same hour, daily departures at the origin and daily flights by the carrier."),
+  B("**Congestion (from the schedule):** scheduled departures and arrivals at the airport in the same hour, and daily airport and carrier volume."),
   B("**Aircraft rotation:** the leg of the day for that tail number and the scheduled turnaround time since its previous leg, computed with a window function:"),
   ...code([
     'w_tail = Window.partitionBy("TAIL_NUM", "FLIGHT_DATE").orderBy("CRS_DEP_MIN")',
@@ -203,12 +202,13 @@ add(H1("5. Methodology and Implementation"),
     '        .withColumn("SCHED_TURNAROUND_MIN",',
     '                    F.col("CRS_DEP_MIN") - F.lag("CRS_ARR_MIN").over(w_tail)))',
   ]),
-  P("ORIGIN (about 350 airports), DEST, ROUTE (thousands of pairs), origin-by-hour and carrier-by-origin have too many categories for one-hot encoding, especially under Spark's maxBins limit for trees. Each became a **smoothed target encoding** (Micci-Barreca, 2001), TE = (n·mean + m·prior)/(n + m) with m = 100, which pulls rare categories towards the global rate. Encoders are fitted on the training split only; unseen categories get the prior."),
+  P("The turnaround is the difference between two scheduled times at the same airport (the previous arrival and the next departure), so both are in that airport's local time, as BTS records them. Legs are ordered by local departure time within each calendar day. This could misorder rare cases with large time-zone differences, it does not check that the previous destination matches the current origin, and a leg whose previous arrival crosses midnight is treated as having no previous leg."),
+  P("ORIGIN, DEST, ROUTE (thousands of pairs), origin-by-hour and carrier-by-origin have too many categories for one-hot encoding under Spark's maxBins limit, so each became a **smoothed target encoding** (Micci-Barreca, 2001), TE = (n·mean + m·prior)/(n + m) with m = 100, fitted on the training split only."),
   H2("5.2 Splitting, imbalance and evaluation"),
-  P("The data was split randomly 70/10/20 into train, validation and test. Because of Colab limits, models were fitted on a {{TRAIN_SAMPLE_PCT}} sample of the training split ({{TRAIN_ROWS_USED}} rows), while validation ({{VALID_ROWS}}) and test ({{TEST_ROWS}}) were scored in full. For the imbalance (He & Garcia, 2009) I used **class weights** w = N/(2·N_class) via weightCol, so both classes count equally in the loss, and tuned the **decision threshold** on validation to maximise F1 instead of using 0.5."),
-  P("**Accuracy alone is misleading here:** a model that never predicts a delay reaches {{BASELINE_ACCURACY}} accuracy while catching none, so it is reported as a baseline. The useful measures are **precision** (the cost of false alarms), **recall** (delays caught) and **F1**, their balance. **ROC-AUC** measures ranking across all thresholds, and **PR-AUC** is more informative when positives are rare (Saito & Rehmsmeier, 2015). Training time is included because scalability is part of the brief."),
+  P("The data was split randomly 70/10/20 into train, validation and test. Because of Colab limits, models were fitted on a {{TRAIN_SAMPLE_PCT}} sample of the training split ({{TRAIN_ROWS_USED}} rows); validation and test ({{TEST_ROWS}} rows) were scored in full. For the imbalance (He & Garcia, 2009) I used **class weights** w = N/(2·N_class) and tuned the **decision threshold** on validation to maximise F1."),
+  P("**Accuracy alone is misleading here**, so a majority-class baseline is reported. The useful measures are **precision** (the cost of false alarms), **recall** (delays caught) and **F1**, their balance, plus **ROC-AUC** for ranking across thresholds and **PR-AUC**, which is more informative when positives are rare (Saito & Rehmsmeier, 2015). Training time is included because scalability is part of the brief."),
   H2("5.3 Models and tuning"),
-  P("All three models share one standardised feature vector, so the comparison is fair. **Logistic Regression** is the interpretable linear baseline; **Random Forest** averages decorrelated trees and captures interactions such as an evening departure with a tight turnaround; **Gradient-Boosted Trees** add trees sequentially, each correcting the last. After a default run, each was tuned with CrossValidator (3-fold, PR-AUC) on a training sample (Table 2) and refitted on the full training sample."),
+  P("All three models share one standardised feature vector. **Logistic Regression** is the interpretable linear baseline, **Random Forest** averages decorrelated trees, and **Gradient-Boosted Trees** add trees sequentially, each correcting the last. Each was tuned with CrossValidator (3-fold, PR-AUC) on a training sample (Table 2) and refitted on the full training sample. The target encoders were fitted on the whole training split before cross-validation, so the held-out folds were not fully independent of the encoding; CV scores may be slightly optimistic, although the test set was not affected."),
   table(["Model", "Grid searched (3-fold CV)", "Selected", "CV PR-AUC"], [
     ["Logistic Regression", "regParam {0.0001, 0.001, 0.01} × elasticNet {0, 0.5}", "{{LR_TUNED_PARAMS}}", "{{LR_CV_PR_AUC}}"],
     ["Random Forest", "maxDepth {8, 12} × numTrees {60, 120}", "{{RF_TUNED_PARAMS}}", "{{RF_CV_PR_AUC}}"],
@@ -219,7 +219,7 @@ add(H1("5. Methodology and Implementation"),
 
 // ---------- 6 Results ----------
 add(H1("6. Results"),
-  P("Table 3 shows the test-set results for the tuned models at the threshold chosen on the validation set, next to the majority-class baseline. Figures 6 to 9 show the same comparison visually."),
+  P("Table 3 shows the test-set results of the tuned models at the validation-tuned threshold."),
   table(["Model", "Accuracy", "Precision", "Recall", "F1", "ROC-AUC", "PR-AUC", "Train (s)"], [
     ["Majority baseline", "{{BASELINE_ACCURACY}}", "0.000", "0.000", "0.000", "0.500", "-", "-"],
     ["Logistic Regression", "{{LR_ACCURACY}}", "{{LR_PRECISION}}", "{{LR_RECALL}}", "{{LR_F1}}", "{{LR_ROC_AUC}}", "{{LR_PR_AUC}}", "{{LR_TRAIN_S}}"],
@@ -227,15 +227,15 @@ add(H1("6. Results"),
     ["Gradient-Boosted Trees", "{{GBT_ACCURACY}}", "{{GBT_PRECISION}}", "{{GBT_RECALL}}", "{{GBT_F1}}", "{{GBT_ROC_AUC}}", "{{GBT_PR_AUC}}", "{{GBT_TRAIN_S}}"],
   ], [2180, 1000, 1000, 900, 850, 1000, 950, 1020]),
   caption("Table 3. Test-set performance (delayed = positive class). Thresholds: LR {{LR_THRESHOLD}}, RF {{RF_THRESHOLD}}, GBT {{GBT_THRESHOLD}}."),
-  P("{{BEST_F1_MODEL}} achieved the highest F1 and {{BEST_AUC_MODEL}} the highest ROC-AUC. {{FASTEST_MODEL}} was the fastest to train and {{SLOWEST_MODEL}} the slowest. Both tree models clearly beat Logistic Regression (ROC-AUC {{LR_ROC_AUC}}), so the non-linear interactions matter. GBT was better than Random Forest on every threshold-free metric while training in less than a quarter of the time. Tuning lifted Random Forest from {{RF_BASE_ROC_AUC}} to {{RF_ROC_AUC}} ROC-AUC but doubled its training time, while for GBT the grid simply confirmed the default settings."),
+  P("On the random test split, {{BEST_F1_MODEL}} achieved the highest F1 and ROC-AUC; {{FASTEST_MODEL}} was fastest and {{SLOWEST_MODEL}} slowest to train. Both tree models achieved higher ROC-AUC than Logistic Regression ({{LR_ROC_AUC}}), which suggests that feature interactions help to predict delays. GBT beat Random Forest on every threshold-free metric in under a quarter of the training time; tuning lifted Random Forest from {{RF_BASE_ROC_AUC}} to {{RF_ROC_AUC}} but doubled its training time. In practical terms, GBT identifies about 60% of delayed flights (recall {{GBT_RECALL}}), but with a precision of {{GBT_PRECISION}} roughly six in ten of its alerts are false alarms, and it misses about 40% of delays."),
   ...figure("06_model_metrics.png", "Figure 6. Test-set metrics for the three models; the dashed line is the majority-class accuracy."),
   ...figure("08_roc_pr_curves.png", "Figure 7. ROC and precision-recall curves on the test set."),
   ...figure("09_confusion_matrices.png", "Figure 8. Confusion matrices at each model's validation-tuned threshold."),
   ...figure("07_training_time.png", "Figure 9. Training time on the training sample.", 4.8),
-  P("Figure 10 shows the most important features. In GBT the top three were {{GBT_TOP_FEATURE_1}}, {{GBT_TOP_FEATURE_2}} and {{GBT_TOP_FEATURE_3}}. Because impurity-based importance can favour continuous features, I also ran a permutation test (shuffling one feature and measuring the drop in ROC-AUC), shown in Figure 11. It partly agrees: the origin-airport-by-hour delay rate (TE_ORIGIN_HOUR) and the scheduled turnaround matter most, while the calendar features fall back."),
+  P("Figure 10 shows the most important features; in GBT the top three were {{GBT_TOP_FEATURE_1}}, {{GBT_TOP_FEATURE_2}} and {{GBT_TOP_FEATURE_3}}. Because impurity importance can favour continuous features, I also ran a permutation test (Figure 11). It partly agrees: the origin-airport-by-hour delay rate (TE_ORIGIN_HOUR) and the scheduled turnaround matter most."),
   ...figure("11_feature_importance.png", "Figure 10. Top features: Logistic Regression coefficients (left), Random Forest and GBT importances."),
   ...figure("12_gbt_permutation_importance.png", "Figure 11. GBT permutation importance: drop in test ROC-AUC when each feature is shuffled.", 4.6),
-  P("Finally, Table 4 compares the random split with a stricter **temporal** split, where everything (including the target encoders) is refitted on January to September and tested on October to December."),
+  P("Finally, Table 4 compares the random split with a stricter **temporal** split, where everything (including the target encoders) is refitted on January to September and tested on October to December. The decision thresholds were reused from the random-split validation set, which includes some October to December flights, so this test is not completely independent; selecting thresholds on September only would be cleaner."),
   table(["Model", "ROC-AUC random", "ROC-AUC temporal", "F1 random", "F1 temporal"], [
     ["Logistic Regression", "{{LR_ROC_AUC}}", "{{LR_TEMPORAL_ROC_AUC}}", "{{LR_F1}}", "{{LR_TEMPORAL_F1}}"],
     ["Random Forest", "{{RF_ROC_AUC}}", "{{RF_TEMPORAL_ROC_AUC}}", "{{RF_F1}}", "{{RF_TEMPORAL_F1}}"],
@@ -246,21 +246,25 @@ add(H1("6. Results"),
 
 // ---------- 7 Discussion ----------
 add(H1("7. Discussion"),
-  P("First, the baseline matters: doing nothing already gives {{BASELINE_ACCURACY}} accuracy, so F1, recall and PR-AUC are the honest measures. Second, the threshold is a business decision. An airline pre-positioning spare crews might accept more false alarms to catch more delays, while a passenger alert needs higher precision. Results at both 0.5 and the tuned threshold are saved in model_results_all.csv."),
-  P("The temporal test is the most important result. ROC-AUC fell to {{GBT_TEMPORAL_ROC_AUC}} for GBT and {{RF_TEMPORAL_ROC_AUC}} for Random Forest, and Logistic Regression collapsed (recall {{LR_TEMPORAL_RECALL}}) because October to December lie outside the months it was trained on and its linear month terms extrapolate badly. The high impurity importance of day-of-month and holiday distance suggests the random split let the trees memorise specific bad days, which a temporal split cannot reward. The temporal figure is therefore the honest estimate for real use."),
+  P("First, the baseline matters: doing nothing gives {{BASELINE_ACCURACY}} accuracy, so F1, recall and PR-AUC are more informative here. Second, the threshold is a business decision: spare-crew planning can accept more false alarms to catch more delays, while a passenger alert needs higher precision."),
+  P("I consider the temporal test more relevant to practical use because it evaluates the models on later months excluded from training. ROC-AUC fell to {{GBT_TEMPORAL_ROC_AUC}} for GBT and {{RF_TEMPORAL_ROC_AUC}} for Random Forest, and Random Forest had the higher temporal F1 ({{RF_TEMPORAL_F1}} against {{GBT_TEMPORAL_F1}}), so the preferred model depends on the metric and the setting. Logistic Regression collapsed (recall {{LR_TEMPORAL_RECALL}}), probably because its linear month terms extrapolate badly to unseen months. The high impurity importance of day-of-month and holiday distance suggests the trees partly learned specific bad days under the random split, which does not carry over."),
   P("Schedule-only prediction is possible but limited: most delay causes (weather, air traffic control, knock-on delays) are invisible in the schedule, which caps what any model here can achieve."),
   H2("7.1 Limitations"),
-  B("**No weather data.** Weather is a major cause of delay and was outside the scope of this project."),
-  B("**Tail numbers** in the data are the aircraft that actually flew. Airlines sometimes swap aircraft on the day, so the rotation features may contain a small amount of information that was not known the evening before."),
-  B("**Target encoding** on the training split is in-sample for training rows. Smoothing reduces this, but out-of-fold encoding would be cleaner."),
-  B("**Compute limits:** models were trained on a sample of the training data, with small tuning grids, on {{N_CORES}} cores. Results with the full data on a cluster could be slightly better."),
+  B("**No weather data.** Weather is a known cause of delay, and earlier work found that adding it improves accuracy (Belcastro et al., 2016)."),
+  B("**Tail numbers** record the aircraft that actually flew; same-day aircraft swaps may leak a little information into the rotation features."),
+  B("**Rotation features** rely on local scheduled times without a destination-origin check (Section 5.1)."),
+  B("**Temporal thresholds** were chosen on a validation set that overlaps October to December."),
+  B("**Target encoding and cross-validation:** the encoders were fitted on the training split before cross-validation, so CV scores may be optimistic, and training rows use in-sample encodings. Out-of-fold encoding inside the CV pipeline would address both."),
+  B("**Compute limits:** a training sample, small tuning grids and {{N_CORES}} cores."),
   B("**One year** of data, so year-to-year changes (new routes, fleet changes) are not tested."),
+  H2("7.2 What I learnt"),
+  P("The main things I learnt were about evaluation rather than algorithms. Accuracy was misleading on its own, since predicting \"on time\" for every flight beats every model on it. Leakage was harder to avoid than I expected: excluding post-flight columns was easy, but subtler issues, such as counting flights after removing cancellations or fitting encoders before cross-validation, only became clear on closer inspection. The temporal test also changed my view of which model is best. Practically, my first full run stopped after more than three hours, which taught me to checkpoint results, and a difference in how Spark 3.5 and 4.0 order feature metadata shifted my feature-importance labels until a chart that did not make sense was investigated."),
 );
 
 // ---------- 8 Conclusion ----------
 add(H1("8. Conclusions and Future Work"),
-  P("This project built a leakage-free Spark pipeline over twelve months of BTS data ({{RAW_ROWS}} flights), with schedule, congestion and aircraft-rotation features and three MLlib classifiers. {{BEST_F1_MODEL}} performed best on F1 ({{BEST_F1_VALUE}}), and class weights with a tuned threshold mattered far more for recall than chasing accuracy. Parquet, broadcast joins and in-Spark evaluation are what made a full year workable on free Colab."),
-  P("Next, I would (1) add hourly NOAA weather forecasts, the biggest missing signal; (2) use out-of-fold target encoding; (3) try XGBoost on Spark with GPUs; (4) train on the full data on a Dataproc cluster; and (5) use Structured Streaming to update predictions on the day as earlier flights report delays."),
+  P("This project built a Spark pipeline over {{RAW_ROWS}} flights from 2025 that excludes post-flight information. On the random test split, {{BEST_F1_MODEL}} performed best on F1 ({{BEST_F1_VALUE}}) and ROC-AUC, while on later, unseen months Random Forest had the higher F1 and GBT a slightly higher ROC-AUC, so the choice of model depends on how it will be used. Parquet, broadcast joins and in-Spark evaluation made a full year workable on free Colab."),
+  P("Next, I would add hourly NOAA weather forecasts, use out-of-fold target encoding inside the CV pipeline, compare runs with and without class weights and threshold tuning, select temporal thresholds on an earlier month, and repeat the timing runs on a Dataproc cluster."),
 );
 COUNTING = false;
 
@@ -301,7 +305,7 @@ add(new Paragraph({ children: [new PageBreak()] }), H1("Appendix A. Notebook str
   ], [1400, 7500], { numericRight: false }),
   caption("Table A1. Notebook sections."),
   H1("Appendix B. Feature dictionary"),
-  table(["Feature", "Type", "Definition (all known before departure)"], [
+  table(["Feature", "Type", "Definition (from the published schedule)"], [
     ["MONTH, DAY_OF_MONTH, DAY_OF_WEEK, IS_WEEKEND", "numeric", "Calendar fields of the scheduled flight date"],
     ["MONTH_SIN/COS, DEP_HOUR_SIN/COS", "numeric", "Cyclical encodings of month and scheduled departure time"],
     ["DEP_HOUR, ARR_HOUR", "numeric", "Scheduled departure / arrival hour (local)"],
@@ -334,9 +338,9 @@ const doc = new Document({
     default: { document: { run: { font: FONT, size: 22 } } },
     paragraphStyles: [
       { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-        run: { size: 30, bold: true, font: FONT, color: BLUE }, paragraph: { spacing: { before: 320, after: 140 }, outlineLevel: 0 } },
+        run: { size: 30, bold: true, font: FONT, color: BLUE }, paragraph: { spacing: { before: 320, after: 140 }, outlineLevel: 0, keepNext: true, keepLines: true } },
       { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
-        run: { size: 24, bold: true, font: FONT, color: "2E74B5" }, paragraph: { spacing: { before: 220, after: 100 }, outlineLevel: 1 } },
+        run: { size: 24, bold: true, font: FONT, color: "2E74B5" }, paragraph: { spacing: { before: 220, after: 100 }, outlineLevel: 1, keepNext: true, keepLines: true } },
     ],
   },
   numbering: { config: [
