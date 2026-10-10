@@ -113,8 +113,10 @@ def label_box(s, x, y, w, h, label, fill=BLUE, color=WHITE, size=13):
     tf = shp.text_frame
     tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     tf.margin_left = tf.margin_right = Inches(0.08)
-    p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER
-    r = p.add_run(); r.text = label; r.font.size = Pt(size); r.font.color.rgb = color; r.font.bold = True
+    for k, line in enumerate(label.split("\n")):       # one centred paragraph per line
+        p = tf.paragraphs[0] if k == 0 else tf.add_paragraph()
+        p.alignment = PP_ALIGN.CENTER
+        r = p.add_run(); r.text = line; r.font.size = Pt(size); r.font.color.rgb = color; r.font.bold = True
     return shp
 
 def arrow(s, x1, y1, x2, y2):
@@ -215,6 +217,42 @@ text(s, 5.55, Y0 + 0.75, 3.7, 3.7, [
     "Schedule information only: no departure delay, no weather",
     "Google Colab (2 cores, ~12 GB RAM) with PySpark",
 ], size=14, bullets=True)
+
+# ------------------------------------------------------------------ 4b. process model (CRISP-DM)
+import math as _math
+s = new_slide("PROCESS MODEL")
+text(s, X0, Y0 - 0.3, 4.6, 0.3, ["CRISP-DM (Wirth & Hipp, 2000): an iterative data-science process"], size=12, color=MUTED)
+phases = ["Business\nunderstanding", "Data\nunderstanding", "Data\npreparation", "Modelling", "Evaluation", "Deployment\n(proposed)"]
+cx, cy, rx, ry, bw, bh = 2.55, 4.15, 1.75, 1.75, 1.45, 0.62
+centres = []
+for k, name in enumerate(phases):
+    ang = _math.radians(-90 + k * 60)                 # start at the top, clockwise
+    x, y = cx + rx * _math.cos(ang), cy + ry * _math.sin(ang)
+    centres.append((x, y))
+    label_box(s, x - bw / 2, y - bh / 2, bw, bh, name, fill=PLUM if k == 5 else (BLUE if k in (1, 2) else PURPLE), size=10)
+for k in range(6):                                     # arrows around the cycle, edge to edge
+    (x1, y1), (x2, y2) = centres[k], centres[(k + 1) % 6]
+    dx, dy = x2 - x1, y2 - y1; d = _math.hypot(dx, dy)
+    sh = 0.42 / d
+    arrow(s, x1 + dx * sh, y1 + dy * sh, x2 - dx * sh, y2 - dy * sh)
+hub = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(cx - 0.55), Inches(cy - 0.55), Inches(1.1), Inches(1.1))
+hub.fill.solid(); hub.fill.fore_color.rgb = LIGHT; hub.line.color.rgb = GREY; hub.shadow.inherit = False
+tf = hub.text_frame; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+for k, line in enumerate(("BTS", "2025 data")):
+    p0 = tf.paragraphs[0] if k == 0 else tf.add_paragraph(); p0.alignment = PP_ALIGN.CENTER
+    r0 = p0.add_run(); r0.text = line; r0.font.size = Pt(11); r0.font.bold = True; r0.font.color.rgb = PURPLE
+mapping = [
+    "**Business understanding: **flag flights likely to arrive 15+ min late, before departure",
+    "**Data understanding: **12 BTS files, data-quality profile, exploratory charts",
+    "**Data preparation: **cleaning funnel, leakage control, 39 features",
+    "**Modelling: **LR, Random Forest, GBT with 3-fold CV tuning",
+    "**Evaluation: **test metrics, temporal test, feature importance",
+    "**Deployment (proposed): **weather, Dataproc cluster, streaming",
+]
+text(s, 5.0, Y0 - 0.05, 4.45, 3.7, mapping, size=12, bullets=True)
+box(s, 5.0, Y0 + 3.75, 4.45, 1.0, fill=LIGHT)
+text(s, 5.2, Y0 + 3.8, 4.1, 0.9, [("Iterations in this project", {"bold": True, "color": PURPLE}),
+     ("trial run → feature-label fix → full run → resume after disconnect → revision after review", {"size": 11})], size=12)
 
 # ------------------------------------------------------------------ 5. data set used
 s = new_slide("DATA SET USED")
@@ -457,6 +495,7 @@ refs = [
     "Meng, X., et al. (2016). MLlib: Machine learning in Apache Spark. JMLR, 17(34), 1–7.",
     "Micci-Barreca, D. (2001). A preprocessing scheme for high-cardinality categorical attributes. SIGKDD Explorations, 3(1), 27–32.",
     "Saito, T., & Rehmsmeier, M. (2015). The precision-recall plot is more informative than the ROC plot. PLoS ONE, 10(3), e0118432.",
+    "Wirth, R., & Hipp, J. (2000). CRISP-DM: Towards a standard process model for data mining. Proc. 4th Int. Conf. on the Practical Applications of Knowledge Discovery and Data Mining, 29–39.",
     "Zaharia, M., et al. (2016). Apache Spark: A unified engine for big data processing. CACM, 59(11), 56–65.",
 ]
 text(s, X0, Y0 - 0.1, W, 4.9, refs, size=11, bullets=False)
@@ -477,8 +516,7 @@ SCRIPT = [
     f"with Apache Spark. I used every U.S. domestic flight from 2025, {V('RAW_ROWS')} of them, to test one practical question: "
     "can we tell, before a plane even leaves the gate, that it is going to arrive late?",
     # 2 background
-    "Delays matter because they are expensive. A major U.S. study estimated the cost at around 33 billion dollars in 2007 alone, shared "
-    "between airlines, passengers and lost demand. The industry uses a simple rule: a flight that arrives 15 minutes or more after "
+    "Delays matter because they are expensive: a major U.S. study estimated around 33 billion dollars in 2007 alone. The industry uses a simple rule: a flight that arrives 15 minutes or more after "
     "schedule counts as delayed. The Bureau of Transportation Statistics publishes a record for every domestic flight, which gives us "
     "millions of labelled examples. If risky flights can be flagged early, airlines can re-plan crews and spare aircraft, and passengers "
     "with tight connections can be warned.",
@@ -493,6 +531,9 @@ SCRIPT = [
     "Logistic Regression, Random Forest and Gradient-Boosted Trees; evaluate them with metrics that suit an imbalanced problem, plus "
     "training time; and show how the pipeline scales out. The scope is all 2025 U.S. domestic flights, using schedule information "
     "only, running on a free Google Colab machine.",
+    # 4b process model
+    "I followed CRISP-DM, the standard process model for data-science projects. It is a cycle rather than a straight line, which "
+    "matched reality: a trial run, a fix, the full run, and a resume after Colab disconnected.",
     # 5 data set
     f"The data is the official BTS on-time performance table: twelve monthly CSV files, 3.17 gigabytes, and {V('RAW_ROWS')} flights. "
     "Each file has about 110 columns, but I only load 17 of them, for leakage reasons I'll come back to. After cleaning, "
@@ -510,8 +551,7 @@ SCRIPT = [
     "the schedule features, cleaning and the label. The second row is the machine learning layer: split, encode, train, tune and "
     "evaluate, and finally export every chart and table used in my report.",
     # 8 technology
-    "The stack is Spark through PySpark, with MLlib for the models, Spark SQL and Parquet for the data, Python for plotting, and Google "
-    "Colab for compute, with data and checkpoints in Google Drive.",
+    "The stack: Spark through PySpark, MLlib, Spark SQL with Parquet, Python, and Google Colab with Google Drive.",
     # 9 cleaning and leakage
     f"Cleaning followed the brief: remove cancelled and diverted flights and rows with no arrival delay, then duplicates and impossible "
     f"values, which leaves {V('CLEAN_ROWS')} flights. The bigger issue is leakage. Columns such as wheels-on time or the delay-cause "
@@ -547,8 +587,8 @@ SCRIPT = [
     "used by Spark 3.5, but Colab ran Spark 4.0, which orders it differently. It was spotted because one chart ranked day-of-week as the "
     "strongest feature, which made no sense, and it is now fixed with an explicit check. Leakage, imbalance and memory limits also needed care.",
     # 15 future scope
-    "For future work, I would add weather forecasts, which earlier studies found improve accuracy; use out-of-fold target encoding inside "
-    "cross-validation; measure the effect of class weights directly; and repeat the training and timing on a real cluster.",
+    "Next, I would add weather forecasts, use out-of-fold target encoding inside cross-validation, measure the effect of class weights, "
+    "and repeat the training on a real cluster.",
     # 16 what I learnt
     "So what did I learn? First, accuracy can be misleading on imbalanced data. Second, leakage is subtle: removing post-flight columns "
     "was easy, but problems like counting flights after cancellations, or encoding categories before cross-validation, only showed up on "
