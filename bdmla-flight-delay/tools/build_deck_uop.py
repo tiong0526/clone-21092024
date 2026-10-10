@@ -171,9 +171,6 @@ for p, size in zip(paras, (24, 24, 30)):
         r.font.size = Pt(size)
 sub = next(sh for sh in title_slide.shapes if sh.name == "Text Placeholder 7")
 sub.text_frame.text = "[Your name]  ·  [Student ID]  ·  M33877  ·  November 2026"
-notes(title_slide, "[0:00-0:20] Good morning. My project asks a simple, practical question: can we tell, before a plane "
-      "leaves the gate, whether it will arrive late? I used Apache Spark on every U.S. domestic flight from 2025, "
-      f"{V('RAW_ROWS')} of them, and compared three machine learning models.")
 
 # ------------------------------------------------------------------ 2. background
 s = new_slide("BACKGROUND")
@@ -188,10 +185,6 @@ for i, (big, lab, col) in enumerate([("$32.9B", "cost of U.S. delays in 2007", P
     box(s, 6.0, y, 3.4, 1.4, fill=LIGHT)
     text(s, 6.2, y + 0.15, 3.0, 0.7, [big], size=30, bold=True, color=col)
     text(s, 6.2, y + 0.85, 3.0, 0.45, [lab], size=13, color=MUTED)
-notes(s, "[0:20-0:55] Delays are expensive: a U.S. study put the cost at around 33 billion dollars in 2007 alone. "
-      "The industry rule is simple: 15 minutes or more late counts as delayed. BTS publishes a record for every domestic flight, "
-      "which gives millions of labelled examples. If we can flag risky flights early, airlines can re-plan crews and aircraft, "
-      "and passengers with tight connections can be warned.")
 
 # ------------------------------------------------------------------ 3. project proposal
 s = new_slide("PROJECT PROPOSAL")
@@ -203,10 +196,6 @@ text(s, X0, Y0 + 1.45, W, 3.4, [
     "**Before departure only: **many public notebooks use departure delay as an input, which is only known once the plane has left. That inflates accuracy and makes the model useless in practice (Kaufman et al., 2012).",
     "**Approach: **ingest all twelve 2025 monthly files with Apache Spark, engineer schedule-based features, and compare three Spark MLlib classifiers.",
 ], size=16, bullets=True)
-notes(s, "[0:55-1:25] So the question is: using only what is known before departure, will this flight be 15 or more minutes late? "
-      "That 'before departure' part matters. Many online examples use departure delay as an input, which is basically cheating, "
-      "because you only know it once the plane has gone. My approach: Spark for the whole year of data, schedule-based features, "
-      "and three MLlib classifiers compared fairly.")
 
 # ------------------------------------------------------------------ 4. objectives and scope
 s = new_slide("OBJECTIVES AND SCOPE")
@@ -226,9 +215,6 @@ text(s, 5.55, Y0 + 0.75, 3.7, 3.7, [
     "Schedule information only: no departure delay, no weather",
     "Google Colab (2 cores, ~12 GB RAM) with PySpark",
 ], size=14, bullets=True)
-notes(s, "[1:25-1:50] Five objectives: ingest and clean everything in Spark, keep the features leakage-free, train three MLlib models, "
-      "evaluate them properly for an imbalanced problem, and show how it scales. The scope is all 2025 U.S. domestic flights, "
-      "schedule information only, run on a free Colab machine.")
 
 # ------------------------------------------------------------------ 5. data set used
 s = new_slide("DATA SET USED")
@@ -256,10 +242,6 @@ if "CLEAN_ROWS" in PH:
         pts[i].format.fill.solid(); pts[i].format.fill.fore_color.rgb = c
     ch.value_axis.tick_labels.number_format = '#,##0,,"M"'; ch.value_axis.tick_labels.number_format_is_linked = False
 text(s, 2.2, 6.95, 7.2, 0.3, ["Source: Bureau of Transportation Statistics (2026), Reporting Carrier On-Time Performance."], size=9, color=MUTED)
-notes(s, f"[1:50-2:25] The data is the official BTS on-time table: twelve monthly files, 3.17 gigabytes, {V('RAW_ROWS')} flights. "
-      f"Each file has about 110 columns but I only load 17, which I'll explain under leakage. After cleaning, {V('DELAY_RATE')} of flights "
-      f"are delayed, so the classes are imbalanced: a model that always says 'on time' already gets {V('BASELINE_ACCURACY')} accuracy. "
-      f"Converting the CSVs to Parquet once made the same query {V('PARQUET_SPEEDUP')} faster.")
 
 # ------------------------------------------------------------------ 6. exploratory analysis
 s = new_slide("EXPLORATORY ANALYSIS")
@@ -269,18 +251,12 @@ text(s, X0, Y0 + 3.45, W, 1.5, [
     "**Delays build through the day: **about 9% of 5am departures arrive late, rising to about 33% at 7pm.",
     "**Delays propagate along the aircraft: **an aircraft's 1st leg is late ~15% of the time, its 7th ~34%; turnarounds under 40 minutes give a 38% delay rate.",
 ], size=14, bullets=True)
-notes(s, "[2:25-3:05] Two patterns shaped my features. On the left: only about 9 percent of 5am departures arrive late, but by 7pm "
-      "it's about a third. On the right: the later the leg of the day for an aircraft, and the tighter its scheduled turnaround, the "
-      "more likely it is to be late. Delays roll forward through an aircraft's day, so I built features that capture exactly that.")
 
 # ------------------------------------------------------------------ 7. architecture design
 s = new_slide("ARCHITECTURE DESIGN")
 picture(s, ROOT / "assets" / "architecture_pipeline.png", X0, Y0 - 0.05, W, 4.3)
 text(s, X0, Y0 + 4.35, W, 0.6, [f"Google Colab · PySpark {V('SPARK_VERSION')} · Spark SQL / DataFrames for processing · Spark MLlib for modelling · Parquet checkpoint in Google Drive"],
      size=12, color=MUTED, align=PP_ALIGN.CENTER)
-notes(s, "[3:05-3:40] Here is the whole pipeline. The twelve files sit in Google Drive. Spark reads each month, maps the column names, keeps only "
-      "the allowed columns and unions them. Everything is written once to Parquet, then schedule features, cleaning and the label. The second row "
-      "is the machine learning part: split, encode, train, tune, evaluate, and export everything for the report.")
 
 # ------------------------------------------------------------------ 8. technology used
 s = new_slide("TECHNOLOGY USED")
@@ -292,8 +268,6 @@ for i, (n, name, sub) in enumerate(tech):
     text(s, x + 0.25, y + 0.2, 2.2, 0.7, [n], size=30, color=CARD_NUM)
     text(s, x + 0.25, y + 0.95, 2.2, 0.45, [name], size=17, bold=True, color=INK)
     text(s, x + 0.25, y + 1.4, 2.2, 0.35, [sub], size=12, color=MUTED)
-notes(s, "[3:40-3:55] The stack: Spark through PySpark, with MLlib for the models and Spark SQL plus Parquet for the data work, Python for "
-      "plotting, all running on Google Colab with the data and checkpoints in Google Drive.")
 
 # ------------------------------------------------------------------ 9. data cleaning and leakage
 s = new_slide("CLEANING AND LEAKAGE")
@@ -318,11 +292,6 @@ text(s, 5.4, Y0 + 0.7, 3.85, 3.9, [
     "Schedule counts use the full schedule, before cancelled flights are removed",
     "An assertion stops the run if a forbidden column reaches the features",
 ], size=13, bullets=True)
-notes(s, f"[3:55-4:40] Cleaning followed the brief: remove cancelled and diverted flights and rows without an arrival delay, then duplicates "
-      f"and impossible values, leaving {V('CLEAN_ROWS')} flights. The bigger issue is leakage. Columns like wheels-on time or the delay-cause "
-      "minutes are only known after landing, so they're never loaded. I also excluded departure delay and taxi-out. One subtle point: if you "
-      "count flights per hour after removing cancellations, a stormy day looks quiet and the feature leaks the outcome, so those counts are "
-      "computed on the full schedule first.")
 
 # ------------------------------------------------------------------ 10. feature engineering
 s = new_slide("FEATURE ENGINEERING")
@@ -341,10 +310,6 @@ box(s, X0, Y0 + 3.55, W, 1.1, fill=PLUM)
 text(s, X0 + 0.3, Y0 + 3.55, W - 0.6, 1.1, [("High-cardinality categories → smoothed target encoding. ", {"color": WHITE, "bold": True}),
      ("Origin, destination, route, origin×hour and carrier×origin become their historical delay rate, fitted on the training split only.", {"color": WHITE})],
      size=13, anchor=MSO_ANCHOR.MIDDLE)
-notes(s, "[4:40-5:20] Four groups of features, all known in advance: calendar and time, including distance to a public holiday; basic flight "
-      "details; congestion, meaning how many flights are scheduled at the same airport in the same hour; and aircraft rotation, built with a "
-      "Spark window function over each tail number. Airports and routes have thousands of values, so I replaced them with their historical "
-      "delay rate, fitted on the training data only.")
 
 # ------------------------------------------------------------------ 11. model training pipeline
 s = new_slide("MODEL TRAINING PIPELINE")
@@ -365,10 +330,6 @@ text(s, X0, Y0 + 3.45, W, 1.4, [
     "**Random Forest: **many independent trees, easy to parallelise.",
     "**Gradient-Boosted Trees: **trees added in sequence, each fixing the last; sequential rounds make it hardest to scale.",
 ], size=13, bullets=True)
-notes(s, "[5:20-6:00] The training pipeline: a random 70/10/20 split, target encoding fitted on training data only, then the features are "
-      "assembled and standardised. Because only about one flight in five is delayed, every model gets class weights. Each model is tuned with "
-      "3-fold cross-validation on PR-AUC, the decision threshold is chosen on the validation set, and the test set is touched once at the end, "
-      "plus a stricter temporal test I'll show shortly.")
 
 # ------------------------------------------------------------------ 12. results
 s = new_slide("RESULTS ON THE TEST SET")
@@ -402,11 +363,6 @@ text(s, 5.7, Y0 + 2.45, 3.75, 2.2, [
     f"**Tuning: **Random Forest {V('RF_BASE_ROC_AUC')} → {V('RF_ROC_AUC')} ROC-AUC, but twice the training time",
     "**Accuracy trap: **doing nothing scores higher accuracy than every model",
 ], size=12, bullets=True)
-notes(s, f"[6:00-6:55] These are the test results. Gradient-boosted trees had the best F1, {V('BEST_F1_VALUE')}, and the best ROC-AUC, "
-      f"{V('GBT_ROC_AUC')}. Look at the last row: a 'model' that always says on time gets {V('BASELINE_ACCURACY')} accuracy and catches "
-      "zero delays. That's why accuracy alone is misleading here, and why I focus on recall, F1 and PR-AUC. Both tree models clearly beat "
-      "logistic regression, so the non-linear interactions matter. And boosting wins twice: more accurate than the tuned random forest, "
-      "and less than a quarter of the training time.")
 
 # ------------------------------------------------------------------ 13. what drives it / temporal test
 s = new_slide("WHAT DRIVES DELAYS")
@@ -427,11 +383,6 @@ text(s, X0, Y0 + 3.55, W, 1.4, [
     "**Top drivers: **the airport's historical delay rate at that hour, and the scheduled turnaround time.",
     f"**Honest test: **trained on Jan–Sep, tested on Oct–Dec, GBT ROC-AUC drops {V('GBT_ROC_AUC')} → {V('GBT_TEMPORAL_ROC_AUC')}; the random split let trees memorise specific bad days.",
 ], size=13, bullets=True)
-notes(s, "[6:55-7:50] On the left, permutation importance: how much accuracy drops when one feature is shuffled. The two that matter most are "
-      "the historical delay rate of that airport at that hour, and the scheduled turnaround time, which is the delay-propagation story again. "
-      "On the right is the stricter test: train on January to September and predict October to December. ROC-AUC drops from "
-      f"{V('GBT_ROC_AUC')} to {V('GBT_TEMPORAL_ROC_AUC')} for boosting, and logistic regression collapses because it never saw those months. "
-      "A random split lets the model learn specific storm days; the temporal number is the honest one for real use.")
 
 # ------------------------------------------------------------------ 14. challenges
 s = new_slide("CHALLENGES")
@@ -445,9 +396,6 @@ for i, (t, d) in enumerate(chal):
     label_box(s, X0, y + 0.05, 0.5, 0.75, str(i + 1), fill=PURPLE, size=16)
     text(s, X0 + 0.7, y, 8.3, 0.4, [t], size=15, bold=True)
     text(s, X0 + 0.7, y + 0.38, 8.3, 0.5, [d], size=12, color=MUTED)
-notes(s, "[7:50-8:30] A few real challenges. Colab disconnected my first full run after more than three hours, so I added checkpoints and a "
-      "resume option. On Colab's Spark 4, the feature-importance labels were silently shifted; I only caught it because logistic regression "
-      "claimed day-of-week was the strongest feature, which made no sense. Plus leakage, imbalance, and fitting 3 gigabytes into a 12 gigabyte machine.")
 
 # ------------------------------------------------------------------ 15. future scope
 s = new_slide("FUTURE SCOPE")
@@ -461,8 +409,6 @@ for i, (t, d) in enumerate(fut):
     box(s, x, y, 4.4, 1.35, fill=LIGHT)
     text(s, x + 0.25, y + 0.15, 3.9, 0.4, [t], size=16, bold=True, color=PURPLE)
     text(s, x + 0.25, y + 0.58, 3.9, 0.7, [d], size=13, color=MUTED)
-notes(s, "[8:30-9:00] Next steps: weather forecasts are the biggest missing signal; XGBoost on GPUs; the full training set on a real Dataproc "
-      "cluster; and Spark streaming to update predictions on the day as earlier flights report delays.")
 
 # ------------------------------------------------------------------ 16. conclusion
 s = new_slide("CONCLUSION")
@@ -473,28 +419,113 @@ text(s, X0, Y0, W, 4.8, [
     "Big data tooling made it feasible on free Colab: Parquet, broadcast joins and keeping evaluation inside Spark.",
     "Schedule-only prediction is possible but limited: weather and on-the-day updates are the way forward.",
 ], size=16, bullets=True)
-notes(s, f"[9:00-9:40] To wrap up: a full, leakage-free Spark pipeline over every 2025 domestic flight. Gradient-boosted trees performed "
-      "best. The biggest lessons were about evaluation, not algorithms: handling imbalance, choosing the threshold, and testing on future "
-      "months. And schedule-only prediction has a ceiling, so weather data and on-the-day updates are where the next gains are.")
 
 # ------------------------------------------------------------------ 17. end slide (template) moved last
 lst = prs.slides._sldIdLst
 end_id = lst[1]
 lst.remove(end_id); lst.append(end_id)
 ph = next(sh for sh in end_slide.shapes if sh.name == "Text Placeholder 5")
-ph.text_frame.text = "Thank you. Questions?"
-notes(end_slide, f"""[9:40-10:00] Thank you, I'm happy to take questions.
+ph.text_frame.text = "Thank you"
 
-LIKELY QUESTIONS (prepare, don't read):
-- Why not use departure delay? It's only known after the plane leaves, so the model would be useless for planning, and it inflates accuracy (leakage).
-- Why is accuracy not enough? Always predicting "on time" already gets {V('BASELINE_ACCURACY')}; we care about catching delays (recall) without too many false alarms (precision).
-- Why target encoding? Hundreds of airports and thousands of routes; one-hot would explode the feature space, and Spark trees need maxBins >= categories. Fitted on training data only.
-- Why did you sample the training data? Colab has 2 cores and ~12 GB RAM; validation and test were always scored in full. On a cluster I'd use everything.
-- How would this scale? Same code, different master URL; LR and RF parallelise well, GBT is sequential across rounds. GPUs via RAPIDS or XGBoost-Spark. A full scan was {V('SCALE_AGG_SPEEDUP')} faster on 2 cores than 1.
-- Could tail numbers leak? Slightly: aircraft can be swapped on the day. In production you'd use the planned rotation from the airline.
-- Why the temporal drop? The random split lets the model learn specific bad days; Oct-Dec months were never seen in training.
-
-Key references: Ball et al. (2010); Bureau of Transportation Statistics (2026); Kaufman et al. (2012); Meng et al. (2016); Saito & Rehmsmeier (2015); Zaharia et al. (2016).""")
+# ------------------------------------------------------------------ speaker script (pre-recorded talk, ~10 min)
+# One entry per slide, in order. Timings are derived from the word count at a relaxed recording pace.
+WPM = 138
+SCRIPT = [
+    # 1 title
+    "Hello, my name is [your name], and this is my Big Data and Machine Learning Applications project: predicting airline flight delays "
+    f"with Apache Spark. I used every U.S. domestic flight from 2025, {V('RAW_ROWS')} of them, to test one practical question: "
+    "can we tell, before a plane even leaves the gate, that it is going to arrive late?",
+    # 2 background
+    "Delays matter because they are expensive. A major U.S. study estimated the cost at around 33 billion dollars in 2007 alone, shared "
+    "between airlines, passengers and lost demand. The industry uses a simple rule: a flight that arrives 15 minutes or more after "
+    "schedule counts as delayed. The Bureau of Transportation Statistics publishes a record for every domestic flight, which gives us "
+    "millions of labelled examples. If risky flights can be flagged early, airlines can re-plan crews and spare aircraft, and passengers "
+    "with tight connections can be warned.",
+    # 3 proposal
+    "So the problem statement is: using only information known before departure, will this flight arrive 15 or more minutes late? "
+    "That makes it a binary classification problem. The 'before departure' condition is the important part. Many online examples use "
+    "the departure delay as an input, but you only know that once the plane has left, so the model looks accurate but is useless in "
+    "practice. My approach is to process the whole year with Spark, build features from the schedule only, and compare three Spark "
+    "MLlib classifiers fairly.",
+    # 4 objectives and scope
+    "I set five objectives: ingest and clean all twelve monthly files in Spark; engineer features with no target leakage; train "
+    "Logistic Regression, Random Forest and Gradient-Boosted Trees; evaluate them with metrics that suit an imbalanced problem, plus "
+    "training time; and show how the pipeline scales out. The scope is all 2025 U.S. domestic flights, using schedule information "
+    "only, running on a free Google Colab machine.",
+    # 5 data set
+    f"The data is the official BTS on-time performance table: twelve monthly CSV files, 3.17 gigabytes, and {V('RAW_ROWS')} flights. "
+    "Each file has about 110 columns, but I only load 17 of them, for leakage reasons I'll come back to. After cleaning, "
+    f"{V('DELAY_RATE')} of flights are delayed. So the classes are imbalanced: a model that always says 'on time' would already score "
+    f"{V('BASELINE_ACCURACY')} accuracy. One early optimisation was converting the CSVs to Parquet once; after that, the same query "
+    f"ran {V('PARQUET_SPEEDUP')} faster.",
+    # 6 exploratory analysis
+    "Exploring the data showed two patterns that shaped my features. On the left, the delay rate by scheduled departure hour: only "
+    "about 9 percent of 5am departures arrive late, but by 7pm it's around a third. On the right, the later the leg of the day for an "
+    "aircraft, the more likely it is to be late, and very tight turnarounds under 40 minutes have a 38 percent delay rate. Delays roll "
+    "forward through an aircraft's day, so I built features that capture exactly that.",
+    # 7 architecture
+    "This is the whole pipeline. The twelve files sit in Google Drive. Spark reads each month, maps the column names, keeps only the "
+    "allowed columns and unions them into one DataFrame. That is written once to Parquet, which also acts as a checkpoint. Then come "
+    "the schedule features, cleaning and the label. The second row is the machine learning layer: split, encode, train, tune and "
+    "evaluate, and finally export every chart and table used in my report.",
+    # 8 technology
+    "The technology stack is Apache Spark through PySpark, with MLlib for the models and Spark SQL with Parquet for the data processing, "
+    "Python for plotting, and Google Colab for compute, with the data and checkpoints stored in Google Drive.",
+    # 9 cleaning and leakage
+    f"Cleaning followed the brief: remove cancelled and diverted flights and rows with no arrival delay, then duplicates and impossible "
+    f"values, which leaves {V('CLEAN_ROWS')} flights. The bigger issue is leakage. Columns such as wheels-on time or the delay-cause "
+    "minutes are only known after landing, so they are never loaded. I also excluded departure delay and taxi-out time. There's a "
+    "subtle trap too: if you count flights per hour after removing cancellations, a stormy day looks quiet, and the feature leaks the "
+    "outcome. So those counts are calculated on the full schedule first.",
+    # 10 feature engineering
+    f"I ended up with {V('N_FEATURES')} features in four groups, all known in advance: calendar and time, including how close the date "
+    "is to a public holiday; basic flight details; airport congestion, meaning how many flights are scheduled at the same airport in the "
+    "same hour; and aircraft rotation, built with a Spark window function over each tail number. Airports and routes have thousands of "
+    "values, which would explode the feature space and break Spark's tree limits, so I replaced each with its smoothed historical delay "
+    "rate, fitted on the training data only.",
+    # 11 model pipeline
+    "Here is the training pipeline. The data is split 70, 10 and 20 percent into train, validation and test sets. Because Colab only has "
+    f"two cores, models were trained on a {V('TRAIN_SAMPLE_PCT')} sample of the training set, but validation and test were always scored "
+    "in full. Every model gets class weights, so delayed flights count as much as on-time ones. Each model is tuned with three-fold "
+    "cross-validation on PR-AUC, the decision threshold is chosen on the validation set, and the test set is used only once, at the end.",
+    # 12 results
+    f"These are the test results. Gradient-Boosted Trees came out best, with an F1 of {V('BEST_F1_VALUE')} and a ROC-AUC of "
+    f"{V('GBT_ROC_AUC')}. Notice the last row of the table: a 'model' that always says on time gets {V('BASELINE_ACCURACY')} accuracy "
+    "and catches zero delays. That's why accuracy on its own is misleading here, and why I focus on recall, F1 and PR-AUC instead. Both "
+    "tree models clearly beat Logistic Regression, so the non-linear interactions matter. Tuning improved Random Forest, but doubled its "
+    "training time, and boosting still beat it while training in less than a quarter of the time.",
+    # 13 drivers and temporal test
+    "What is the model actually using? The left chart shows permutation importance: how much accuracy drops when one feature is "
+    "shuffled. The two that matter most are the historical delay rate of that airport at that hour, and the scheduled turnaround time, "
+    "which is the delay-propagation story again. On the right is my strictest test: train on January to September, then predict October "
+    f"to December. ROC-AUC drops from {V('GBT_ROC_AUC')} to {V('GBT_TEMPORAL_ROC_AUC')} for boosting. A random split lets the model "
+    "learn specific storm days that also appear in the test set, so this temporal figure is the honest estimate for real use.",
+    # 14 challenges
+    "The project had some real challenges. My first full run was disconnected by Colab after more than three hours, so I added Parquet "
+    "checkpoints, saved results after every model, and a resume option that reuses the tuned settings. On Colab's Spark 4, the "
+    "feature-importance labels were silently shifted; I only caught it because Logistic Regression claimed day-of-week was its "
+    "strongest feature, which made no sense. I fixed it and added an assertion. And throughout, I had to control leakage, handle the "
+    "imbalance, and fit three gigabytes into a twelve-gigabyte machine.",
+    # 15 future scope
+    "For future work, weather forecasts are the biggest missing signal, so joining NOAA data would come first. I'd also try XGBoost or "
+    "LightGBM on Spark with GPU acceleration, train on the full data on a real Dataproc cluster, where the same code simply runs on more "
+    "executors, and use Spark Structured Streaming to update predictions on the day as earlier flights report delays.",
+    # 16 conclusion
+    "To conclude: I built a complete, leakage-free Spark pipeline over every U.S. domestic flight in 2025, and Gradient-Boosted Trees "
+    "performed best. The biggest lessons were about evaluation rather than algorithms: handling the imbalance, choosing the threshold "
+    "for the business need, and testing honestly on future months. Schedule-only prediction works, but it has a ceiling, so weather data "
+    "and on-the-day updates are where the next gains will come from.",
+    # 17 thank you
+    "Thank you very much for watching. The full code, results and report are included in my submission.",
+]
+assert len(SCRIPT) == len(prs.slides), (len(SCRIPT), len(prs.slides))
+elapsed = 0.0
+for s, line in zip(prs.slides, SCRIPT):
+    secs = len(line.split()) / WPM * 60
+    a, b = elapsed, elapsed + secs
+    notes(s, f"[{int(a // 60)}:{int(a % 60):02d}-{int(b // 60)}:{int(b % 60):02d}]  {line}")
+    elapsed = b
+print(f"script: {sum(len(l.split()) for l in SCRIPT)} words, about {elapsed / 60:.1f} min at {WPM} wpm")
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
 prs.save(str(OUT))
