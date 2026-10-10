@@ -26,6 +26,18 @@ function csv(name) {
   return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => [cols[i], v])));
 }
 const has = (k) => PH[k] !== undefined;
+const figPath = (name) => { const f = OUT_DIR && path.join(OUT_DIR, "figures", name); return f && fs.existsSync(f) ? f : null; };
+// place a PNG (file or buffer) inside a box, keeping its aspect ratio, centred
+async function fitImage(slide, src, x, y, w, h, name, crop) {
+  let img = sharp(src);
+  const meta = await img.metadata();
+  if (crop) img = img.extract(crop(meta));
+  const buf = await img.png().toBuffer();
+  const m2 = await sharp(buf).metadata();
+  const r = Math.min(w / m2.width, h / m2.height);
+  const iw = m2.width * r, ih = m2.height * r;
+  slide.addImage({ data: "image/png;base64," + buf.toString("base64"), x: x + (w - iw) / 2, y: y + (h - ih) / 2, w: iw, h: ih, objectName: name });
+}
 const V = (k) => (has(k) ? String(PH[k]) : `[${k}]`);
 const num = (k) => parseFloat(String(PH[k]).replace(/[^0-9.\-]/g, ""));
 
@@ -214,9 +226,13 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
       x: 6.75, y: 1.45, w: 6.0, h: 4.9, ...chartBase(), title: "Delay rate by scheduled departure hour", chartColors: [HEX.rf],
       lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7, showLegend: false, valAxisLabelFormatCode: "0%", catAxisTitle: "Hour of day",
       showCatAxisTitle: true, catAxisTitleColor: HEX.muted, catAxisTitleFontSize: 11, objectName: "chart-hourly" });
+  } else if (figPath("03_delay_rate_patterns.png")) {
+    // notebook figure is a 2x2 grid; the departure-hour panel is the bottom-left quadrant
+    await fitImage(s, figPath("03_delay_rate_patterns.png"), 6.75, 1.45, 6.0, 4.9, "fig-hourly",
+      (m) => ({ left: 0, top: Math.round(m.height / 2), width: Math.round(m.width / 2), height: Math.round(m.height / 2) }));
   } else placeholderBox(s, 6.75, 1.45, 6.0, 4.9, "Chart: delay rate by departure hour\n(rebuild with notebook outputs: tables/delay_rate_by_dep_hour.csv)", "ph-hourly");
   SRC(s, "Source: Bureau of Transportation Statistics (2026), Reporting Carrier On-Time Performance.");
-  notes(s, `[1:45-2:30] The data is the official BTS on-time table. I downloaded all twelve months of 2025, about 3 gigabytes of CSV and [RAW_ROWS] flights. Each file has around 110 columns, but I only load 17, which I'll come back to when I talk about leakage. After cleaning, about [DELAY_RATE] of flights are delayed, so the classes are imbalanced. The chart shows one of the clearest patterns: [CHECK the chart; typically] delays build up through the day, because a late aircraft carries its delay into its next flights.`);
+  notes(s, `[1:45-2:30] The data is the official BTS on-time table. I downloaded all twelve months of 2025, about 3 gigabytes of CSV and [RAW_ROWS] flights. Each file has around 110 columns, but I only load 17, which I'll come back to when I talk about leakage. After cleaning, about [DELAY_RATE] of flights are delayed, so the classes are imbalanced. The chart shows the clearest pattern: only about 9 percent of 5am departures arrive late, but by 7pm it's about a third. Delays build up through the day because a late aircraft carries its delay into its next flights.`);
 
   // 5. Architecture -------------------------------------------------------------
   s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "Data and architecture" });
@@ -233,8 +249,8 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
   txt(s, "{{PARQUET_SPEEDUP}}", { x: MX + 0.25, y: 4.6, w: 2.6, h: 0.85, fontSize: 36, bold: true, color: C.accent3, fit: "shrink" });
   s.addText("faster scan on Parquet than on the raw CSVs", { isTextBox: true, x: MX + 0.25, y: 5.45, w: 2.6, h: 0.8, fontSize: 13, color: C.accent6, margin: 0 });
   card(s, MX + 3.3, 4.45, 3.1, 1.95, "scale-stat");
-  txt(s, "{{SCALE_LR_SPEEDUP}}", { x: MX + 3.55, y: 4.6, w: 2.6, h: 0.85, fontSize: 36, bold: true, color: C.accent1, fit: "shrink" });
-  txt(s, "LR training speed-up, 1 → {{SCALE_MAX_CORES}} cores", { x: MX + 3.55, y: 5.45, w: 2.6, h: 0.8, fontSize: 13, color: C.accent6 });
+  txt(s, "{{SCALE_AGG_SPEEDUP}}", { x: MX + 3.55, y: 4.6, w: 2.6, h: 0.85, fontSize: 36, bold: true, color: C.accent1, fit: "shrink" });
+  txt(s, "faster full scan, 1 → {{SCALE_MAX_CORES}} cores", { x: MX + 3.55, y: 5.45, w: 2.6, h: 0.8, fontSize: 13, color: C.accent6 });
   bullets(s, [
     "Allow-list + Parquet: read 3 GB of text once, then columnar",
     "Shuffle partitions cut from 200 → a few per core, plus AQE",
@@ -243,7 +259,7 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
     "Metrics in one Spark aggregation, nothing big collected",
     "Same code on a cluster: change the master URL; GPUs via RAPIDS / XGBoost-Spark",
   ], { x: 7.35, y: 1.55, w: 5.4, h: 4.9, fontSize: 15 });
-  notes(s, `[3:10-4:00] A quick look under the hood. Spark breaks the job into stages and tasks, one per data partition. In Colab the driver and executor share one machine, but the same code runs on a cluster just by changing the master URL. The changes that mattered most: converting to Parquet once, which made the same query [PARQUET_SPEEDUP] faster; reducing shuffle partitions; broadcasting small lookup tables; and computing all metrics inside Spark. I also ran a small scaling test: going from 1 to [SCALE_MAX_CORES] cores made logistic regression [SCALE_LR_SPEEDUP] faster.`);
+  notes(s, `[3:10-4:00] A quick look under the hood. Spark breaks the job into stages and tasks, one per data partition. In Colab the driver and executor share one machine, but the same code runs on a cluster just by changing the master URL. The changes that mattered most: converting to Parquet once, which made the same query [PARQUET_SPEEDUP] faster; reducing shuffle partitions; broadcasting small lookup tables; and computing all metrics inside Spark. I also ran a small scaling test: going from 1 to 2 cores made a full scan [SCALE_AGG_SPEEDUP] faster. Logistic regression barely changed, because on a small cached sample each iteration is dominated by fixed overhead. Its parallel gradient step pays off with much more data per task, which is what a cluster gives you.`);
 
   // 7. Cleaning & leakage ----------------------------------------------------------
   pres.addSection({ title: "Method" });
@@ -298,7 +314,7 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
   s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "Method" });
   s.addText("Three Spark MLlib classifiers, one fair setup", { placeholder: "title" });
   const mdl = [
-    [fa.FaChartLine, "Logistic Regression", "Linear baseline; interpretable coefficients", "Gradient summed across partitions: scales almost linearly"],
+    [fa.FaChartLine, "Logistic Regression", "Linear baseline; interpretable coefficients", "Gradients computed per partition: scales once each task has enough data"],
     [fa.FaTree, "Random Forest", "Many decorrelated trees, averaged", "Trees are independent: easy to parallelise"],
     [fa.FaLayerGroup, "Gradient-Boosted Trees", "Trees added in sequence, each fixing the last", "Sequential rounds: hardest to scale"],
   ];
@@ -340,7 +356,7 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
     highlight: /^\[/.test(c) ? "FFFF00" : undefined } }))), {
     x: 8.15, y: 1.5, w: 4.58, colW: [1.9, 0.68, 0.66, 0.66, 0.68], rowH: 0.48, border: { type: "solid", pt: 0.5, color: HEX.grid }, margin: 0.05, objectName: "results-table" });
   txt(s, "Best F1: {{BEST_F1_MODEL}} ({{BEST_F1_VALUE}})\nFastest to train: {{FASTEST_MODEL}}", { x: 8.15, y: 4.75, w: 4.58, h: 1.4, fontSize: 15, bold: true, color: C.text1 });
-  notes(s, `[6:20-7:15] These are the test results. [BEST_F1_MODEL] had the best F1, [BEST_F1_VALUE], and [BEST_AUC_MODEL] the best ROC-AUC. Notice the last row: a "model" that always says on time gets [BASELINE_ACCURACY] accuracy and catches zero delays. That's why accuracy alone is misleading here, and why I focus on recall, F1 and PR-AUC. On training time, [FASTEST_MODEL] was quickest and [SLOWEST_MODEL] slowest. [CHECK: one sentence on whether the extra accuracy of the tree models is worth the training cost.]`);
+  notes(s, `[6:20-7:15] These are the test results. [BEST_F1_MODEL] had the best F1, [BEST_F1_VALUE], and [BEST_AUC_MODEL] the best ROC-AUC. Notice the last row: a "model" that always says on time gets [BASELINE_ACCURACY] accuracy and catches zero delays. That's why accuracy alone is misleading here, and why I focus on recall, F1 and PR-AUC. On training time, [FASTEST_MODEL] was quickest and [SLOWEST_MODEL] slowest. Both tree models clearly beat logistic regression, so the non-linear interactions matter. And boosting wins twice: it's more accurate than the tuned random forest and trains in less than a quarter of the time.`);
 
   // 11. Insights ------------------------------------------------------------------------
   s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "Results" });
@@ -352,6 +368,8 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
       x: MX, y: 1.4, w: 6.1, h: 5.0, ...chartBase(), barDir: "bar", title: "GBT: top 8 features (impurity importance)", chartColors: [HEX.gbt],
       showLegend: false, showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.00", catAxisOrientation: "maxMin",
       valAxisHidden: true, valGridLine: { style: "none" }, barGapWidthPct: 40, catAxisLabelFontSize: 10, objectName: "chart-importance" });
+  } else if (figPath("12_gbt_permutation_importance.png")) {
+    await fitImage(s, figPath("12_gbt_permutation_importance.png"), MX, 1.4, 6.1, 5.0, "fig-importance");
   } else placeholderBox(s, MX, 1.4, 6.1, 5.0, "Native chart: GBT top-8 feature importance\n(rebuild with notebook outputs: tables/feature_importance.csv)", "ph-importance");
   if (SHORT.every((m) => has(`${m}_TEMPORAL_ROC_AUC`))) {
     s.addChart(pres.charts.BAR, [
@@ -361,7 +379,7 @@ const SRC = (slide, t) => slide.addText(t, { isTextBox: true, x: MX, y: H - 0.78
       chartColors: [HEX.navy2, HEX.sky], showLegend: true, legendPos: "b", showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.000",
       valAxisMinVal: 0.5, valAxisMaxVal: 1, valAxisLabelFormatCode: "0.0", barGapWidthPct: 60, objectName: "chart-temporal" });
   } else placeholderBox(s, 6.95, 1.4, 5.78, 5.0, "Native chart: ROC-AUC random vs temporal split\n(rebuild with notebook outputs)", "ph-temporal");
-  notes(s, `[7:15-8:05] On the left, the features the boosted model relied on most: [GBT_TOP_FEATURE_1], [GBT_TOP_FEATURE_2] and [GBT_TOP_FEATURE_3]. [CHECK: one sentence on why these make sense, e.g. route and time-of-day history, rotation.] I also checked this with permutation importance, which [agrees / partly agrees]. On the right is the stricter test: train on January to September, predict October to December. A random split lets the model see the same storm days in training and test, so the temporal score is the honest one for real use. [Describe the size of the drop.]`);
+  notes(s, `[7:15-8:05] On the left is permutation importance: how much accuracy drops when I shuffle one feature. The two that matter most are the historical delay rate of that airport at that hour, and the scheduled turnaround time, which is exactly the delay-propagation story. Interestingly, the tree's own importance ranking also puts day-of-month and holiday distance near the top, which hints that it memorises specific bad days. The right-hand chart confirms it: train on January to September and predict October to December, and ROC-AUC drops from [GBT_ROC_AUC] to [GBT_TEMPORAL_ROC_AUC] for boosting. Logistic regression collapses because it has never seen those months. The temporal number is the honest one for real use.`);
 
   // 12. Discussion ----------------------------------------------------------------------
   s = pres.addSlide({ masterName: "CONTENT", sectionTitle: "Results" });

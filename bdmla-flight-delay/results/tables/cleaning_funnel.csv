@@ -1,0 +1,7 @@
+step,rows,removed
+Raw flights (12 files),7001619,0
+Remove cancelled,6898743,102876
+Remove diverted,6879485,19258
+Remove null ARR_DELAY,6879484,1
+Remove duplicates,6879484,0
+Remove invalid schedule values,6879483,1
