@@ -170,7 +170,7 @@ for p, size in zip(paras, (24, 24, 30)):
     for r in p.runs:
         r.font.size = Pt(size)
 sub = next(sh for sh in title_slide.shapes if sh.name == "Text Placeholder 7")
-sub.text_frame.text = "[Your name]  ·  [Student ID]  ·  M33877  ·  November 2026"
+sub.text_frame.text = "Kelvin Soh  ·  Student ID: [Student ID]  ·  M33877  ·  November 2026"
 
 # ------------------------------------------------------------------ 2. background
 s = new_slide("BACKGROUND")
@@ -442,7 +442,7 @@ text(s, X0, Y0, W, 4.8, [
     f"On the random test split, {V('BEST_F1_MODEL')} performed best (F1 {V('BEST_F1_VALUE')}, ROC-AUC {V('GBT_ROC_AUC')}); on later, unseen months Random Forest had the higher F1, so the best model depends on how it is used.",
     "Accuracy is misleading on imbalanced data; recall, precision, PR-AUC and a temporal test give a fairer picture.",
     "Big data tooling made it feasible on free Colab: Parquet, broadcast joins and keeping evaluation inside Spark.",
-    "Schedule-only prediction is possible but limited; weather data and cleaner validation are the next steps.",
+    "Before extending the model: audit the rotation features, use out-of-fold encoding and chronological validation.",
 ], size=16, bullets=True)
 
 # ------------------------------------------------------------------ 18. references
@@ -473,7 +473,7 @@ ph.text_frame.text = "Thank you"
 WPM = 138
 SCRIPT = [
     # 1 title
-    "Hello, my name is [your name], and this is my Big Data and Machine Learning Applications project: predicting airline flight delays "
+    "Hello, my name is Kelvin Soh, and this is my Big Data and Machine Learning Applications project: predicting airline flight delays "
     f"with Apache Spark. I used every U.S. domestic flight from 2025, {V('RAW_ROWS')} of them, to test one practical question: "
     "can we tell, before a plane even leaves the gate, that it is going to arrive late?",
     # 2 background
@@ -557,7 +557,8 @@ SCRIPT = [
     # 17 conclusion
     "To conclude: I built a Spark pipeline over every U.S. domestic flight in 2025 that excludes post-flight information. On the random "
     "split, Gradient-Boosted Trees performed best; on later months, Random Forest had the higher F1. Schedule-only prediction works, but "
-    "it has a ceiling, and weather data and cleaner validation are the natural next steps.",
+    "it has a ceiling, and before extending it I would first validate the method itself: the rotation features, the encoding and "
+    "the chronological validation.",
     # 18 references
     "The main references I used are listed here.",
     # 19 thank you
