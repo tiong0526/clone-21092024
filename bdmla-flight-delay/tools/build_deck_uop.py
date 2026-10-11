@@ -161,6 +161,13 @@ def chart_title(chart, t):
 def fig(name):
     return RES / "figures" / name
 
+def code_slide(title, shot, caption):
+    """A notebook screenshot (real code + real output, key lines boxed in red) with a one-line takeaway."""
+    s = new_slide(title)
+    picture(s, RES / "screenshots" / shot, X0, Y0 - 0.15, W, 4.45)
+    text(s, X0, Y0 + 4.42, W, 0.55, [caption], size=13, color=MUTED, align=PP_ALIGN.CENTER)
+    return s
+
 
 # ------------------------------------------------------------------ 1. title (template slide)
 tb = next(sh for sh in title_slide.shapes if sh.name == "TextBox 17")
@@ -281,6 +288,10 @@ if "CLEAN_ROWS" in PH:
     ch.value_axis.tick_labels.number_format = '#,##0,,"M"'; ch.value_axis.tick_labels.number_format_is_linked = False
 text(s, 2.2, 6.95, 7.2, 0.3, ["Source: Bureau of Transportation Statistics (2026), Reporting Carrier On-Time Performance."], size=9, color=MUTED)
 
+# ------------------------------------------------------------------ 5b. ingestion in the notebook
+code_slide("SPARK INGESTION", "slide_ingestion.png",
+           f"All 12 files found · {V('RAW_ROWS')} raw flights · the same query runs {V('PARQUET_SPEEDUP')} faster on Parquet than on CSV")
+
 # ------------------------------------------------------------------ 6. exploratory analysis
 s = new_slide("EXPLORATORY ANALYSIS")
 picture(s, fig("03_delay_rate_patterns.png"), X0, Y0, 4.45, 3.3, crop=(0, 0.5, 0.5, 1.0))
@@ -350,6 +361,10 @@ text(s, X0 + 0.3, Y0 + 3.55, W - 0.6, 1.1, [("High-cardinality categories → sm
      ("Origin, destination, route, origin×hour and carrier×origin become their historical delay rate, fitted on the training split only.", {"color": WHITE})],
      size=13, anchor=MSO_ANCHOR.MIDDLE)
 
+# ------------------------------------------------------------------ 10b. encoding and leakage check in the notebook
+code_slide("TARGET ENCODING", "slide_encoding.png",
+           "Fitted on the training split only · 6,886 routes, 4,499 airport-hours · stops if a leakage column appears")
+
 # ------------------------------------------------------------------ 11. model training pipeline
 s = new_slide("MODEL TRAINING PIPELINE")
 flow = [("Split 70/10/20\ntrain · valid · test", BLUE), ("Target-encode\n(train only)", BLUE), ("Assemble +\nstandardise", BLUE),
@@ -369,6 +384,10 @@ text(s, X0, Y0 + 3.45, W, 1.4, [
     "**Random Forest: **many independent trees, easy to parallelise.",
     "**Gradient-Boosted Trees: **trees added in sequence, each fixing the last; sequential rounds make it hardest to scale.",
 ], size=13, bullets=True)
+
+# ------------------------------------------------------------------ 11b. tuning in the notebook
+code_slide("TUNING WITH CV", "slide_tuning.png",
+           "3-fold CrossValidator on PR-AUC · best CV PR-AUC: LR 0.369, RF 0.444, GBT 0.469")
 
 # ------------------------------------------------------------------ 12. results
 s = new_slide("RESULTS ON THE TEST SET")
@@ -540,6 +559,10 @@ SCRIPT = [
     f"{V('DELAY_RATE')} of flights are delayed. So the classes are imbalanced: a model that always says 'on time' would already score "
     f"{V('BASELINE_ACCURACY')} accuracy. One early optimisation was converting the CSVs to Parquet once; after that, the same query "
     f"ran {V('PARQUET_SPEEDUP')} faster.",
+    # 5b ingestion in the notebook
+    "Here is what that step looks like in the notebook. The first cell checks that all twelve files are in Drive, 3.17 gigabytes in "
+    f"total. After the union there are {V('RAW_ROWS')} flights. The bottom box is the benchmark: the same aggregation took about 80 "
+    f"seconds on the CSV files and about 3 seconds on Parquet, a {V('PARQUET_SPEEDUP')} speed-up, so everything after this reads from Parquet.",
     # 6 exploratory analysis
     "Exploring the data showed two patterns that shaped my features. On the left, the delay rate by scheduled departure hour: only "
     "about 9 percent of 5am departures arrive late, but by 7pm it's around a third. On the right, the later the leg of the day for an "
@@ -564,11 +587,21 @@ SCRIPT = [
     "airport in the same hour; and aircraft rotation, built with a Spark window function over each tail number. Airports and routes have "
     "thousands of values, which would explode the feature space and break Spark's tree limits, so I replaced each with its smoothed "
     "historical delay rate, fitted on the training data only.",
+    # 10b encoding in the notebook
+    "This is the target-encoding code. The encoders are fitted on the training split only, so the validation and test flights never "
+    "influence them. The output shows why one-hot encoding was not an option: there are 6,886 routes and 4,499 airport-and-hour "
+    "combinations. The second cell is the leakage guard: an assertion compares the feature list with the forbidden columns, and the "
+    "run stops if any of them is there. In my run it passed.",
     # 11 model pipeline
     "Here is the training pipeline. The data is split 70, 10 and 20 percent into train, validation and test sets. Because Colab only has "
     f"two cores, models were trained on a {V('TRAIN_SAMPLE_PCT')} sample of the training set, but validation and test were always scored "
     "in full. Every model gets class weights, so delayed flights count as much as on-time ones. Each model is tuned with three-fold "
     "cross-validation on PR-AUC, the decision threshold is chosen on the validation set, and the test set is used once, at the end.",
+    # 11b tuning in the notebook
+    "And this is the tuning step in Spark MLlib. Each model has a small parameter grid, and CrossValidator runs three-fold "
+    "cross-validation scored on PR-AUC. The boxed lines are the winners: Random Forest with depth 12 and 120 trees, and boosting with "
+    "depth 6 and a step size of 0.1, which had the best cross-validated PR-AUC, 0.469. Tuning Random Forest alone took about 37 minutes "
+    "on Colab, which shows how expensive a grid search is on two cores.",
     # 12 results
     f"These are the results on the random test split. Gradient-Boosted Trees came out best, with an F1 of {V('BEST_F1_VALUE')} and a "
     f"ROC-AUC of {V('GBT_ROC_AUC')}. In plain terms, it catches about 60 percent of delayed flights, but about six in ten of its delay "

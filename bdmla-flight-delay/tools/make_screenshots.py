@@ -50,6 +50,24 @@ SHOTS = {
     ]),
 }
 
+# Shorter, wider versions for the CW1 slides (bigger font, fewer lines)
+keep = lambda *subs: (lambda t: "\n".join(l for l in t.splitlines() if any(x in l for x in subs)))
+SLIDE_SHOTS = {
+    "slide_ingestion": ("Reading the twelve monthly files, then the CSV-versus-Parquet benchmark", [
+        ("import time, json", [(13, 15), (36, 38)], keep("Files found", "Total size"), ["Files found : 12 / 12", "Total size"]),
+        ("rows_per_file = (staged.groupBy", [(5, 6), (15, 16), (18, 20)], keep("Total flights", "CSV (12", "Parquet"),
+         ["Total flights (raw, all 12 files)", "Parquet speed-up"]),
+    ]),
+    "slide_encoding": ("Target encoding fitted on the training split only, then the leakage assertion", [
+        ("TE_COLUMNS = [\"ORIGIN\", \"DEST\", \"ROUTE\"", [(0, 1), (2, 7), (16, 17)], keep("TE_ROUTE", "TE_ORIGIN_HOUR", "prior"),
+         ["TE_ROUTE", "TE_ORIGIN_HOUR"]),
+        ("from pyspark.ml import Pipeline", [(10, 12)], lambda t: t.splitlines()[0], ["Leakage check passed"]),
+    ]),
+    "slide_tuning": ("Three-fold CrossValidator on PR-AUC for each model", [
+        ("from pyspark.ml.tuning import CrossValidator", [(24, 34), (36, 38), (40, 41), (47, 49)], keep(": best {"), [": best {"]),
+    ]),
+}
+
 CSS = HtmlFormatter(style="default").get_style_defs(".code")
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><style>
 body {{ margin:0; padding:18px; background:#ffffff; font-family: Roboto, Arial, sans-serif; }}
@@ -63,10 +81,12 @@ body {{ margin:0; padding:18px; background:#ffffff; font-family: Roboto, Arial, 
 .code {{ background:#f7f7f7; border-radius:4px; padding:8px 10px; font: 12.5px/1.45 "DejaVu Sans Mono", monospace; white-space:pre; overflow:hidden; }}
 .code pre {{ margin:0; font: inherit; }}
 .gap {{ color:#9aa0a6; font-style:italic; }}
+.big .code, .big .out {{ font-size: 15px; }}
+.big .title {{ font-size: 15px; }}
 .out {{ font: 12.5px/1.45 "DejaVu Sans Mono", monospace; white-space:pre; color:#202124; padding:8px 10px 2px; overflow:hidden; }}
 .hl {{ outline:2px solid #d93025; outline-offset:1px; border-radius:2px; }}
 {css}
-</style></head><body><div class="shot" id="shot"><div class="title"><b>BDMLA_Flight_Delay_Spark.ipynb</b> &nbsp;·&nbsp; {title}</div>{cells}</div></body></html>"""
+</style></head><body><div class="shot {cls}" id="shot"><div class="title"><b>BDMLA_Flight_Delay_Spark.ipynb</b> &nbsp;·&nbsp; {title}</div>{cells}</div></body></html>"""
 
 def render_code(src, ranges):
     lines = src.splitlines()
@@ -95,7 +115,7 @@ def render_output(text, marks):
 
 html_files = []
 tmp = Path(tempfile.mkdtemp())
-for name, (title, parts) in SHOTS.items():
+for name, (title, parts), cls in [(k, v, "") for k, v in SHOTS.items()] + [(k, v, "big") for k, v in SLIDE_SHOTS.items()]:
     blocks = []
     for prefix, ranges, filt, marks in parts:
         c = cell(prefix)
@@ -104,7 +124,7 @@ for name, (title, parts) in SHOTS.items():
         blocks.append(f'<div class="cell"><div class="count">[{c.get("execution_count") or " "}]</div>'
                       f'<div class="body"><div class="code">{code}</div><div class="out">{out}</div></div></div>')
     page = tmp / f"{name}.html"
-    page.write_text(PAGE.format(css=CSS, title=html.escape(title), cells="".join(blocks)), encoding="utf-8")
+    page.write_text(PAGE.format(css=CSS, cls=cls, title=html.escape(title), cells="".join(blocks)), encoding="utf-8")
     html_files.append((page, OUT / f"{name}.png"))
 
 script = tmp / "shoot.js"
