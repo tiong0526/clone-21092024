@@ -179,7 +179,7 @@ for p, size in zip(paras, (24, 24, 30)):
     for r in p.runs:
         r.font.size = Pt(size)
 sub = next(sh for sh in title_slide.shapes if sh.name == "Text Placeholder 7")
-sub.text_frame.text = "Kelvin Soh  ·  Student ID: [Student ID]  ·  M33877  ·  November 2026"
+sub.text_frame.text = "Soh Chee Yong  ·  Student ID: UP2653853  ·  M33877  ·  November 2026"
 
 # ------------------------------------------------------------------ 2. background
 s = new_slide("BACKGROUND")
@@ -531,7 +531,7 @@ ph.text_frame.text = "Thank you"
 WPM = 138
 SCRIPT = [
     # 1 title
-    "Hello, my name is Kelvin Soh, and this is my Big Data and Machine Learning Applications project: predicting airline flight delays "
+    "Hello, my name is Soh Chee Yong, and this is my Big Data and Machine Learning Applications project: predicting airline flight delays "
     f"with Apache Spark. I used every U.S. domestic flight from 2025, {V('RAW_ROWS')} of them, to test one practical question: "
     "can we tell, before a plane even leaves the gate, that it is going to arrive late?",
     # 2 background

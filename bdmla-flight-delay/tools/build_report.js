@@ -115,7 +115,7 @@ add(
   new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: "A Comparative Study of Machine Learning Classifiers on the 2025 BTS On-Time Performance Data", font: FONT, size: 28, color: MUTED })] }),
   P("**Module:** M33877 Big Data and Machine Learning Applications", { alignment: AlignmentType.LEFT }),
   P("**Assessment:** Coursework Item 2, Part 2: Big Data Applications Project (technical report)", { alignment: AlignmentType.LEFT }),
-  P("**Student:** Kelvin Soh      **Student ID:** {{STUDENT_ID}}", { alignment: AlignmentType.LEFT }),
+  P("**Student:** Soh Chee Yong      **Student ID:** UP2653853", { alignment: AlignmentType.LEFT }),
   P("**Lecturer:** Ms Aarushi Vadhavkar", { alignment: AlignmentType.LEFT }),
   P("**Word count (main text, sections 1 to 8):** {{WORD_COUNT}} words, excluding tables, figure captions, code extracts, references and appendices", { alignment: AlignmentType.LEFT }),
   P("**Source code:** BDMLA_Flight_Delay_Spark.ipynb (Google Colab, PySpark {{SPARK_VERSION}}), submitted in the accompanying .zip file", { alignment: AlignmentType.LEFT }),
@@ -350,7 +350,7 @@ const body = buildBody();                      // pass 2: real document
 
 // =====================================================================================
 const doc = new Document({
-  creator: "{{STUDENT_ID}}", title: "Predicting Airline Flight Delays Using Apache Spark",
+  creator: "Soh Chee Yong (UP2653853)", title: "Predicting Airline Flight Delays Using Apache Spark",
   features: { updateFields: true },
   styles: {
     default: { document: { run: { font: FONT, size: 22 } } },
