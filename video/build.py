@@ -4,6 +4,11 @@ Photos are matched to groups by filename prefix (see GROUPS), e.g.
 "IFD12.jpg" or "Amazing Race3.jpg", and play in filename-number order.
 
 Usage: python3 build.py [--photo-seconds 4] [--out out/PSG_Appreciation_2026.mp4]
+                       [--music-style heartfelt|sunny|gentle] [--music my_song.mp3]
+
+--music-style picks one of the original tracks composed by music.py (default:
+heartfelt). --music uses your own audio file instead; it loops if it is shorter
+than the video and fades out at the end.
 """
 import argparse
 import hashlib
@@ -324,6 +329,8 @@ def main():
     ap.add_argument("--photo-seconds", type=float, default=4.0)
     ap.add_argument("--photos", default=str(PHOTOS))
     ap.add_argument("--out", default=str(HERE / "out" / "PSG_Appreciation_2026.mp4"))
+    ap.add_argument("--music-style", default="heartfelt", choices=["heartfelt", "sunny", "gentle"])
+    ap.add_argument("--music", help="use this audio file instead of a composed track")
     args = ap.parse_args()
 
     if WORK.exists():
@@ -395,7 +402,11 @@ def main():
     total = sum(b[1] for b in batches) - XFADE * (len(batches) - 1)
 
     music = WORK / "music.wav"
-    run(["python3", str(HERE / "music.py"), f"{total:.2f}", str(music)])
+    if args.music:
+        run(["ffmpeg", "-v", "error", "-y", "-stream_loop", "-1", "-i", args.music, "-t", f"{total:.2f}",
+             "-af", f"afade=in:d=1,afade=out:st={total - 4:.2f}:d=4", "-ar", "44100", "-ac", "2", str(music)])
+    else:
+        run(["python3", str(HERE / "music.py"), f"{total:.2f}", str(music), "--style", args.music_style])
     run(["ffmpeg", "-v", "error", "-y", "-i", str(silent), "-i", str(music),
          "-vf", f"fade=in:st=0:d=1.5,fade=out:st={total - 2.5:.2f}:d=2.5",
          "-c:v", "libx264", "-preset", "slow", "-crf", "20", "-pix_fmt", "yuv420p",

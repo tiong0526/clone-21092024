@@ -1,0 +1,15 @@
+{
+  "name": "psg-video-music-samples",
+  "private": true,
+  "description": "Instrument note samples used by music.py",
+  "dependencies": {
+    "tonejs-instrument-cello-mp3": "1.1.1",
+    "tonejs-instrument-flute-mp3": "1.1.2",
+    "tonejs-instrument-guitar-acoustic-mp3": "1.1.2",
+    "tonejs-instrument-guitar-nylon-mp3": "1.1.1",
+    "tonejs-instrument-harp-mp3": "1.1.1",
+    "tonejs-instrument-piano-mp3": "1.1.2",
+    "tonejs-instrument-violin-mp3": "1.1.1",
+    "tonejs-instrument-xylophone-mp3": "1.1.2"
+  }
+}
